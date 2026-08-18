@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate repository structure
+        shell: bash
+        run: |
+          required_files=(
+            "README.md"
+            "CONTRIBUTING.md"
+            "LICENSE"
+            ".github/CODEOWNERS"
+            ".github/pull_request_template.md"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "::error file=$file::Required file is missing or empty."
+              exit 1
+            fi
+          done
+
+      - name: Detect Python code
+        id: python
+        shell: bash
+        run: |
+          if find . -type f -name "*.py" \
+            -not -path "./.git/*" \
+            -print -quit | grep -q .; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No Python code found; repository-structure checks are sufficient."
+          fi
+
+      - name: Set up Python
+        if: steps.python.outputs.present == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+
+      - name: Validate Python project contract
+        if: steps.python.outputs.present == 'true'
+        shell: bash
+        run: |
+          if [[ ! -f "requirements.txt" && ! -f "pyproject.toml" ]]; then
+            echo "::error::Python code requires requirements.txt or pyproject.toml."
+            exit 1
+          fi
+
+          if [[ ! -d "tests" ]]; then
+            echo "::error::Python code requires a tests/ directory."
+            exit 1
+          fi
+
+          if ! find tests -type f -name "test_*.py" -print -quit | grep -q .; then
+            echo "::error::No test_*.py files were found under tests/."
+            exit 1
+          fi
+
+      - name: Install Python dependencies
+        if: steps.python.outputs.present == 'true'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+
+          if [[ -f "requirements.txt" ]]; then
+            python -m pip install -r requirements.txt
+          else
+            python -m pip install .
+          fi
+
+          if [[ -f "requirements-dev.txt" ]]; then
+            python -m pip install -r requirements-dev.txt
+          else
+            python -m pip install pytest
+          fi
+
+      - name: Compile Python sources
+        if: steps.python.outputs.present == 'true'
+        run: python -m compileall -q .
+
+      - name: Run tests
+        if: steps.python.outputs.present == 'true'
+        run: python -m pytest -q
