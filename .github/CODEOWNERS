@@ -1,0 +1,15 @@
+# CODEOWNERS — Tech Challenge Fase 3
+# Repo: tech-challenge-oficina-auth
+# Responsável: Lucas Marques (autenticação serverless)
+
+# Responsável padrão (fallback)
+* @helyomendesdev
+
+# Código da Lambda/autenticação
+/src/ @helyomendesdev
+/infra/ @helyomendesdev
+/scripts/ @helyomendesdev
+/docs/ @helyomendesdev
+
+# CI/CD
+/.github/ @helyomendesdev
