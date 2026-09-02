@@ -1,0 +1,21 @@
+{
+  "resource": "/auth",
+  "path": "/auth",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Request-Id": "synthetic-request-invalid-cpf"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "requestId": "gateway-request-invalid-cpf",
+    "resourcePath": "/auth",
+    "httpMethod": "POST"
+  },
+  "body": "{\"cpf\":\"111.111.111-11\"}",
+  "isBase64Encoded": false
+}

@@ -1,0 +1,21 @@
+{
+  "resource": "/auth",
+  "path": "/auth",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Request-Id": "synthetic-request-not-found"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "requestId": "gateway-request-not-found",
+    "resourcePath": "/auth",
+    "httpMethod": "POST"
+  },
+  "body": "{\"cpf\":\"39053344705\"}",
+  "isBase64Encoded": false
+}
