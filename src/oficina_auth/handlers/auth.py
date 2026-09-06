@@ -19,7 +19,15 @@ from oficina_auth.domain import (
     InvalidCredentials,
     InvalidInput,
 )
-from oficina_auth.infrastructure import InMemoryClientRepository
+from oficina_auth.infrastructure import (
+    Boto3SecretsManagerClient,
+    InMemoryClientRepository,
+    PostgresClientRepository,
+    PostgresRepositoryConfig,
+    Rs256TokenIssuer,
+    SecretsManagerDatabaseCredentialsProvider,
+    SecretsManagerPrivateKeyProvider,
+)
 
 JSON_CONTENT_TYPE = "application/json"
 INVALID_INPUT_MESSAGE = "Payload ou CPF invalido."
@@ -72,7 +80,7 @@ def create_local_demo_handler(
 
 
 def create_handler_from_environment(environ: Mapping[str, str] | None = None) -> ApiGatewayHandler:
-    environment = environ or os.environ
+    environment = os.environ if environ is None else environ
     service_environment = environment.get("APP_ENV", "production")
 
     if environment.get("OFICINA_AUTH_ENABLE_IN_MEMORY_DEMO") == "true":
@@ -80,7 +88,31 @@ def create_handler_from_environment(environ: Mapping[str, str] | None = None) ->
             raise DependencyUnavailable("Dependencia de autenticacao nao configurada.")
         raise DependencyUnavailable("Demo local exige dependencias explicitas.")
 
-    raise DependencyUnavailable("Dependencia de autenticacao nao configurada.")
+    config = PostgresRepositoryConfig.from_environment(environment)
+    private_key_secret_id = _required_environment(environment, "JWT_PRIVATE_KEY_SECRET_ID")
+    if private_key_secret_id == config.secret_id:
+        raise DependencyUnavailable("Configuracao de autenticacao indisponivel.")
+
+    secrets_client = Boto3SecretsManagerClient()
+    credentials_provider = SecretsManagerDatabaseCredentialsProvider(
+        secrets_client,
+        config.secret_id,
+    )
+    client_repository = PostgresClientRepository(config, credentials_provider)
+    private_key_provider = SecretsManagerPrivateKeyProvider(secrets_client, private_key_secret_id)
+    token_issuer = Rs256TokenIssuer(private_key_provider)
+    authenticator = AuthenticateClient(client_repository, token_issuer)
+    return create_auth_handler(
+        authenticator,
+        HandlerConfig(service_environment=service_environment),
+    )
+
+
+def _required_environment(environment: Mapping[str, str], name: str) -> str:
+    value = environment.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise DependencyUnavailable("Configuracao de autenticacao indisponivel.")
+    return value
 
 
 def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
