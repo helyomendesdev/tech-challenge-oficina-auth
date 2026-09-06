@@ -12,7 +12,7 @@ Responsável técnico: Lucas Marques (`O-marqs`).
 - Emitir e validar JWT de Cliente por providers de chave.
 - Padronizar correlação, observabilidade e respostas de erro.
 
-Este repositório não implementa a aplicação principal, VPC, subnets, NAT, EKS, ALB ou RDS. Ele é responsável pela Lambda, API Gateway REST regional, rotas, VPC Link V2, Security Groups específicos, regras direcionadas aos SGs externos e CloudWatch específicos do Auth. A composição da Lambda para produção já está preparada com adapters de PostgreSQL e Secrets Manager, mas seu acesso real depende da infraestrutura externa.
+Este repositório não implementa a aplicação principal, VPC, subnets, NAT, EKS, ALB ou RDS. Ele é responsável pela Lambda, API Gateway REST regional, rotas, VPC Link V2, Terraform específico, Security Groups específicos, regras direcionadas aos SGs externos e CloudWatch específicos do Auth. A composição da Lambda para produção já está preparada com adapters de PostgreSQL e Secrets Manager, mas seu acesso real depende da infraestrutura externa.
 
 O Terraform específico do Auth, quando implementado sob `terraform/`, recebe os valores compartilhados por variáveis explícitas. Ele não cria VPC, subnets, NAT Gateway, EKS, ALB, RDS, IAM Role, Secret ou Secret Version e não usa `terraform_remote_state`.
 
@@ -30,6 +30,7 @@ tests/contract/                   Testes do contrato público
 openapi/                          Contrato OpenAPI
 docs/adrs/                        Decisões arquiteturais
 scripts/                          Scripts locais seguros
+terraform/                        Infraestrutura específica do Auth
 ```
 
 ## Núcleo de Autenticação
@@ -124,6 +125,9 @@ python scripts/invoke_local.py
 python scripts/build_lambda.py
 python scripts/inspect_lambda_zip.py build/lambda/oficina_auth_lambda.zip
 python -m build
+terraform -chdir=terraform fmt -check -recursive
+terraform -chdir=terraform init -backend=false
+terraform -chdir=terraform validate
 ```
 
 ## Demonstração Local e Build Lambda
@@ -143,6 +147,7 @@ As dependências declaradas ficam no `pyproject.toml`; as dependências de runti
 - [`docs/adrs/adr-001-identidade-cliente.md`](docs/adrs/adr-001-identidade-cliente.md): identidade mínima do Cliente.
 - [`docs/adrs/adr-002-correlacao-observabilidade.md`](docs/adrs/adr-002-correlacao-observabilidade.md): correlação e propagação de headers.
 - [`docs/adrs/adr-003-credenciais-runtime-e-assinatura-jwt.md`](docs/adrs/adr-003-credenciais-runtime-e-assinatura-jwt.md): credenciais externas e assinatura JWT.
+- [`terraform/README.md`](terraform/README.md): Terraform específico do Auth e contratos de integração.
 
 ## Branches e Ambientes
 
