@@ -43,7 +43,7 @@ resource "aws_lambda_permission" "api_gateway_auth" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.auth.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.auth.execution_arn}/*/POST/auth"
+  source_arn    = "${aws_api_gateway_rest_api.auth.execution_arn}/${var.stage_name}/POST/auth"
 }
 
 resource "aws_api_gateway_method" "root_any" {

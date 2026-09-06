@@ -46,9 +46,17 @@ Copie `terraform.tfvars.example` para um arquivo local ignorado e substitua todo
 terraform fmt -check -recursive
 terraform init -backend=false
 terraform validate
+terraform test
 ```
 
-O lock `.terraform.lock.hcl` é versionado e mantém o provider AWS na versão validada. `terraform plan` e `terraform apply` devem ser executados somente pelo workflow autorizado do Hélio, após a sessão AWS Academy e os inputs externos estarem disponíveis. Este repositório não executa AWS CLI nem acessa Secrets durante a validação local.
+`terraform test` usa mock provider e precisa do ZIP local gerado pelo build; não acessa a AWS. O lock `.terraform.lock.hcl` é versionado e mantém o provider AWS na versão validada. Depois que a sessão AWS Academy e todos os inputs externos estiverem disponíveis, os comandos de entrega são:
+
+```bash
+terraform plan
+terraform apply
+```
+
+Eles devem ser executados somente pelo workflow autorizado do Hélio. Este repositório não executa AWS CLI nem acessa Secrets durante a validação local.
 
 Access logs do REST API são opcionais: `api_gateway_access_log_group_arn` aponta para um Log Group existente, mas a role de logging no nível da conta deve ser configurada externamente. Nenhuma role é inventada neste módulo.
 
