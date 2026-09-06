@@ -9,10 +9,10 @@ Responsável técnico: Lucas Marques (`O-marqs`).
 - Receber solicitações `POST /auth` com CPF.
 - Validar payload e formato do CPF.
 - Representar a identidade autenticada como `Cliente`.
-- Definir a emissão futura de JWT de Cliente.
+- Emitir e validar JWT de Cliente por providers de chave.
 - Padronizar correlação, observabilidade e respostas de erro.
 
-Este repositório não implementa a aplicação principal, K8s, Database, RDS, Lambda real, JWT real, API Gateway real ou Terraform neste momento.
+Este repositório não implementa a aplicação principal, K8s, Database, recursos RDS/Secrets Manager, API Gateway implantado ou Terraform. A composição da Lambda para produção já está preparada com adapters de PostgreSQL e Secrets Manager, mas seu acesso real depende da infraestrutura externa.
 
 ## Arquitetura
 
@@ -21,7 +21,7 @@ A estrutura inicial separa domínio, casos de uso, adaptadores e handlers:
 ```text
 src/oficina_auth/domain/          Regras de domínio
 src/oficina_auth/application/     Casos de uso
-src/oficina_auth/infrastructure/  Integrações futuras
+src/oficina_auth/infrastructure/  Adapters PostgreSQL, Secrets Manager e JWT
 src/oficina_auth/handlers/        Entrypoints futuros
 tests/unit/                       Testes unitários
 tests/contract/                   Testes do contrato público
@@ -39,6 +39,8 @@ O núcleo atual é independente de AWS e frameworks web. Ele contém:
 - Ports `ClientRepository` e `TokenIssuer`.
 - Caso de uso `AuthenticateClient`.
 - Adapter `InMemoryClientRepository`, somente para testes e desenvolvimento local.
+- Adapter `PostgresClientRepository`, para a tabela Django `atendimento_cliente`, lendo apenas `id` e `ativo`.
+- Providers de credenciais e chave privada via Secrets Manager, com cache temporário no processo aquecido.
 - Emissor `Rs256TokenIssuer` e verificador `TokenVerifier`, com chaves fornecidas por providers.
 - Handler `POST /auth` para API Gateway REST API com Lambda proxy integration.
 
@@ -48,7 +50,9 @@ Clientes inexistentes e clientes não elegíveis retornam o mesmo erro público 
 
 O handler em `oficina_auth.handlers.auth.lambda_handler` trata eventos REST API proxy, valida método, `Content-Type`, JSON, body base64, payload exato com `cpf`, correlação e logs JSON seguros para stdout/CloudWatch/New Relic.
 
-Para testes e demonstração local, use `create_local_demo_handler(...)` com dependências explícitas. Produção não usa `InMemoryClientRepository` por fallback silencioso; dependências reais deverão ser configuradas em etapa futura.
+Para testes e demonstração local, use `create_local_demo_handler(...)` com dependências explícitas. A `lambda_handler` de produção exige `DB_HOST`, `DB_PORT`, `POSTGRES_DB=oficina`, `DB_SECRET_ID` e `JWT_PRIVATE_KEY_SECRET_ID`, e compõe PostgreSQL, Secrets Manager e JWT. Produção não usa `InMemoryClientRepository` por fallback silencioso.
+
+O PostgreSQL usa `pg8000`, um driver DB-API puro Python adequado ao empacotamento da Lambda, sem dependência de wheel nativo do sistema operacional. O build instala as dependências de runtime para Python 3.11 e o inspetor exige `pg8000` e `boto3` no ZIP.
 
 ## JWT de Cliente
 
@@ -67,6 +71,16 @@ Claims obrigatórias:
 - `jti` UUIDv4
 
 As chaves são obtidas por provider e não ficam hardcoded. O token não inclui CPF, nome, e-mail ou `created_by_id`.
+
+## Configuração de Runtime
+
+- PostgreSQL usa banco `oficina`, com endpoint e porta em `DB_HOST` e `DB_PORT`, e nome em `POSTGRES_DB`.
+- A Lambda recebe apenas `DB_SECRET_ID`, que aceita nome ou ARN. O exemplo fictício é `oficina-auth`.
+- O Secret de banco tem o formato JSON `{ "username": "oficina_auth", "password": "..." }`. `POSTGRES_USER` e `POSTGRES_PASSWORD` não são variáveis da Lambda.
+- O usuário `oficina_auth` deve ter somente `CONNECT` no banco `oficina`, `USAGE` no schema utilizado e `SELECT` em `atendimento_cliente`; os grants serão provisionados fora deste repositório.
+- A chave privada JWT fica em Secret separado, pertencente ao Auth, identificado por `JWT_PRIVATE_KEY_SECRET_ID`; a resposta do Secrets Manager nunca é registrada.
+- Inputs externos futuros são variáveis explícitas: `vpc_id`, `private_subnet_ids`, `alb_arn`, `alb_security_group_id`, `rds_endpoint`, `rds_port` e `rds_security_group_id`.
+- O ALB é gerenciado pelo Terraform do repositório K8s. `alb_listener_arn` não é usado como input do REST VPC Link V2.
 
 ## Contrato do POST /auth
 
@@ -114,15 +128,17 @@ python -m build
 
 Use `python scripts/invoke_local.py` para executar uma demonstração independente da AWS com eventos sintéticos de API Gateway REST. A saída redige tokens como `<redacted>` e não imprime CPF completo.
 
-Use `python scripts/build_lambda.py` para gerar `build/lambda/oficina_auth_lambda.zip` e seu checksum SHA-256. O diretório `build/` é ignorado pelo Git. Depois execute `python scripts/inspect_lambda_zip.py build/lambda/oficina_auth_lambda.zip` para bloquear testes, caches, `.env`, Git, chaves e arquivos locais no pacote.
+Use `python scripts/build_lambda.py` para gerar `build/lambda/oficina_auth_lambda.zip` e seu checksum SHA-256. O diretório `build/` é ignorado pelo Git. Depois execute `python scripts/inspect_lambda_zip.py build/lambda/oficina_auth_lambda.zip` para bloquear testes, caches, `.env`, Git, chaves e arquivos locais no pacote, além de confirmar os módulos `pg8000` e `boto3`.
 
 ## Documentação
 
 - [`AGENTS.md`](AGENTS.md): regras operacionais para contribuidores e agentes.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): fluxo de branches e pull requests.
 - [`docs/roteiro-teste-auth.md`](docs/roteiro-teste-auth.md): roteiro da demonstração local.
+- [`docs/smoke-test-rds.md`](docs/smoke-test-rds.md): smoke test manual e protegido do RDS real.
 - [`docs/adrs/adr-001-identidade-cliente.md`](docs/adrs/adr-001-identidade-cliente.md): identidade mínima do Cliente.
 - [`docs/adrs/adr-002-correlacao-observabilidade.md`](docs/adrs/adr-002-correlacao-observabilidade.md): correlação e propagação de headers.
+- [`docs/adrs/adr-003-credenciais-runtime-e-assinatura-jwt.md`](docs/adrs/adr-003-credenciais-runtime-e-assinatura-jwt.md): credenciais externas e assinatura JWT.
 
 ## Branches e Ambientes
 

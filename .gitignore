@@ -1,13 +1,43 @@
+# Python environments and caches
 .venv/
-.pytest_cache/
-.ruff_cache/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.tox/
+.nox/
+
+# Coverage, logs, and local reports
 .coverage
+coverage.xml
 htmlcov/
+*.cover
+*.log
+
+# Build and packaging artifacts
 build/
 dist/
 *.egg-info/
+pip-wheel-metadata/
+*.zip
+*.sha256
+
+# Local configuration and secrets
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

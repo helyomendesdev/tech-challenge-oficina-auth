@@ -21,10 +21,13 @@ FORBIDDEN_PARTS = {
 }
 FORBIDDEN_SUFFIXES = {".pem", ".key", ".crt", ".env", ".pyc", ".pyo", ".pyd"}
 FORBIDDEN_NAME_SUFFIXES = (".dist-info", ".data")
+ALLOWED_PUBLIC_CA_BUNDLE = "botocore/cacert.pem"
 REQUIRED_ENTRIES = {
+    "boto3/__init__.py",
     "oficina_auth/handlers/auth.py",
     "oficina_auth/application/authenticate_client.py",
     "oficina_auth/infrastructure/jwt_tokens.py",
+    "pg8000/__init__.py",
 }
 
 
@@ -59,7 +62,7 @@ def inspect_zip(artifact: Path) -> list[str]:
         suffix = Path(entry).suffix.lower()
         if parts.intersection(FORBIDDEN_PARTS):
             failures.append(f"forbidden path in artifact: {entry}")
-        if suffix in FORBIDDEN_SUFFIXES:
+        if suffix in FORBIDDEN_SUFFIXES and entry != ALLOWED_PUBLIC_CA_BUNDLE:
             failures.append(f"forbidden file suffix in artifact: {entry}")
         if any(part.endswith(FORBIDDEN_NAME_SUFFIXES) for part in parts):
             failures.append(f"forbidden metadata directory in artifact: {entry}")

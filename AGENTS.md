@@ -8,7 +8,7 @@ This repository owns only the serverless authentication boundary for the Tech Ch
 
 Do not implement or change the main Django application, Kubernetes repository, Database repository, or shared infrastructure outside authentication. External outputs must be passed as explicit variables. Do not use `terraform_remote_state`.
 
-Do not implement AWS resources, RDS access, Lambda runtime logic, JWT signing, or Terraform until the corresponding contract or ADR is confirmed. VPC Link work is blocked until the `alb_arn` ownership contract is agreed.
+Do not implement AWS resources, RDS provisioning, VPC Link, Django integration, or Terraform in this repository. Runtime adapters for PostgreSQL and Secrets Manager are allowed, but real access is exercised only after external infrastructure is available. JWT signing and verification remain provider-based; the private key must come from a separate Auth-owned runtime Secret and must never be hardcoded. The ALB is managed by the K8s Terraform repository; Auth consumes explicit external inputs such as `alb_arn`, and `alb_listener_arn` is not a REST VPC Link V2 input.
 
 ## Official Commands
 
@@ -30,7 +30,7 @@ python -m build
 
 ## Security Rules
 
-Never log or commit CPF, `Authorization`, tokens, passwords, keys, private keys, secrets, or real production payloads. Examples must be synthetic. JWT payloads represent `Cliente`; `created_by_id` is never a client identity.
+Never log or commit CPF, `Authorization`, tokens, passwords, keys, private keys, secrets, database credentials, or real production payloads. The Lambda must not receive `POSTGRES_USER` or `POSTGRES_PASSWORD` directly. Examples must be synthetic. JWT payloads represent `Cliente`; `created_by_id` is never a client identity.
 
 ## Git and Delivery Rules
 

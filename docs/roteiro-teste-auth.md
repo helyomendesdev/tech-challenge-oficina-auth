@@ -38,7 +38,7 @@ Evidências esperadas:
 - Artefato em `build/lambda/oficina_auth_lambda.zip`.
 - Checksum em `build/lambda/oficina_auth_lambda.zip.sha256`.
 - Inspeção com `zip_inspection=ok`.
-- Dependências empacotadas como wheels Linux `manylinux2014_x86_64` para Python 3.11.
+- `pg8000` é empacotado como wheel `py3-none-any` por ser puro Python; dependências com binários, como `cryptography`, são resolvidas para `manylinux2014_x86_64` e Python 3.11.
 - Dois builds consecutivos devem produzir o mesmo SHA-256.
 - ZIP sem `tests/`, `.git/`, `.env`, caches, `.venv`, `dist/`, `build/`, arquivos `.pem`, `.key`, `.pyc` ou `.pyo`.
 
@@ -54,4 +54,6 @@ python -m build
 
 ## Diferença para AWS Real
 
-A demonstração local usa `InMemoryClientRepository` e chave RSA efêmera apenas por composição explícita em `scripts/invoke_local.py`. A Lambda em produção não usa adapter em memória por fallback silencioso. Integrações reais com banco, secrets, API Gateway implantado, Authorizer e Terraform pertencem a etapas futuras.
+A demonstração local usa `InMemoryClientRepository` e chave RSA efêmera apenas por composição explícita em `scripts/invoke_local.py`. A Lambda em produção não usa adapter em memória por fallback silencioso. A composição de produção usa `PostgresClientRepository`, `SecretsManagerDatabaseCredentialsProvider` e `SecretsManagerPrivateKeyProvider`. Ela exige `POSTGRES_DB=oficina`, consulta `atendimento_cliente` com `id` e `ativo`, e não aceita `POSTGRES_USER` ou `POSTGRES_PASSWORD` como configuração da Lambda.
+
+O smoke test real só deve ser executado depois da migration e da infraestrutura existirem. Este roteiro não acessa AWS nem executa SQL de criação de usuário. O build empacota `pg8000`, driver DB-API puro Python, e `boto3` no ZIP para Python 3.11.
