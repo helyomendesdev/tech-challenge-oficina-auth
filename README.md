@@ -130,6 +130,8 @@ Use `python scripts/invoke_local.py` para executar uma demonstração independen
 
 Use `python scripts/build_lambda.py` para gerar `build/lambda/oficina_auth_lambda.zip` e seu checksum SHA-256. O diretório `build/` é ignorado pelo Git. Depois execute `python scripts/inspect_lambda_zip.py build/lambda/oficina_auth_lambda.zip` para bloquear testes, caches, `.env`, Git, chaves e arquivos locais no pacote, além de confirmar os módulos `pg8000` e `boto3`.
 
+As dependências declaradas ficam no `pyproject.toml`; as dependências de runtime resolvidas, incluindo transitivas, ficam fixadas em [`requirements.lock`](requirements.lock). O build instala exclusivamente esse lock com hashes, sem usar a `.venv` como fonte do ZIP, e falha se os marcadores de dependência direta estiverem desatualizados. Não edite o lock manualmente: para atualizá-lo, resolva novamente as versões para `manylinux2014_x86_64`, Python 3.11 e ABI `cp311` com `pip download --only-binary=:all: --platform manylinux2014_x86_64 --implementation cp --python-version 3.11 --abi cp311`, registre os hashes com `python -m pip hash` e valide com o build e o inspetor. Dependências de desenvolvimento nunca entram no ZIP.
+
 ## Documentação
 
 - [`AGENTS.md`](AGENTS.md): regras operacionais para contribuidores e agentes.

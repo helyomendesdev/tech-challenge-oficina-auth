@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_ROOT = ROOT / "build" / "lambda"
 STAGING_DIR = BUILD_ROOT / "staging"
+LOCK_PATH = ROOT / "requirements.lock"
 DEFAULT_ZIP_PATH = BUILD_ROOT / "oficina_auth_lambda.zip"
 FIXED_ZIP_TIMESTAMP = (2024, 1, 1, 0, 0, 0)
 EXCLUDED_NAMES = {
@@ -39,6 +41,7 @@ def main() -> int:
     args = parser.parse_args()
 
     output_path = args.output if args.output.is_absolute() else ROOT / args.output
+    _validate_runtime_lock()
     _prepare_build_dir()
     _install_runtime_dependencies(
         platform=args.platform,
@@ -64,10 +67,6 @@ def _prepare_build_dir() -> None:
 
 
 def _install_runtime_dependencies(platform: str, python_version: str, abi: str) -> None:
-    dependencies = _runtime_dependencies()
-    if not dependencies:
-        return
-
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     subprocess.run(
@@ -78,7 +77,10 @@ def _install_runtime_dependencies(platform: str, python_version: str, abi: str) 
             "install",
             "--disable-pip-version-check",
             "--no-compile",
+            "--no-cache-dir",
+            "--no-deps",
             "--only-binary=:all:",
+            "--require-hashes",
             "--platform",
             platform,
             "--implementation",
@@ -89,7 +91,8 @@ def _install_runtime_dependencies(platform: str, python_version: str, abi: str) 
             abi,
             "--target",
             str(STAGING_DIR),
-            *dependencies,
+            "--requirement",
+            str(LOCK_PATH),
         ],
         cwd=ROOT,
         env=env,
@@ -97,10 +100,51 @@ def _install_runtime_dependencies(platform: str, python_version: str, abi: str) 
     )
 
 
-def _runtime_dependencies() -> list[str]:
+def _validate_runtime_lock() -> None:
+    if not LOCK_PATH.is_file():
+        raise RuntimeError(f"Runtime dependency lock not found: {LOCK_PATH.name}")
+
     with (ROOT / "pyproject.toml").open("rb") as pyproject_file:
         pyproject = tomllib.load(pyproject_file)
-    return list(pyproject["project"].get("dependencies", []))
+
+    declared = {
+        _normalize_package_name(_requirement_name(requirement))
+        for requirement in pyproject["project"].get("dependencies", [])
+    }
+    direct = set()
+    locked = set()
+    for line in LOCK_PATH.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# direct:"):
+            direct.add(_normalize_package_name(stripped.removeprefix("# direct:").strip()))
+            continue
+        if not stripped or stripped.startswith("#") or stripped.startswith("--"):
+            continue
+        requirement = stripped.split("#", 1)[0].rstrip("\\ ")
+        if "==" not in requirement:
+            raise RuntimeError("Runtime dependency lock contains an unpinned requirement")
+        locked.add(_normalize_package_name(_requirement_name(requirement)))
+
+    if direct != declared:
+        missing = ", ".join(sorted(declared - direct)) or "none"
+        stale = ", ".join(sorted(direct - declared)) or "none"
+        raise RuntimeError(
+            f"Runtime dependency lock is stale (missing direct: {missing}; stale direct: {stale})"
+        )
+    if not direct <= locked:
+        missing = ", ".join(sorted(direct - locked))
+        raise RuntimeError(f"Runtime dependency lock marks missing packages: {missing}")
+
+
+def _requirement_name(requirement: str) -> str:
+    match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9_.-]*)", requirement)
+    if not match:
+        raise RuntimeError("Could not parse a runtime dependency name")
+    return match.group(1)
+
+
+def _normalize_package_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def _copy_application_code() -> None:
