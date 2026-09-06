@@ -12,7 +12,9 @@ Responsável técnico: Lucas Marques (`O-marqs`).
 - Emitir e validar JWT de Cliente por providers de chave.
 - Padronizar correlação, observabilidade e respostas de erro.
 
-Este repositório não implementa a aplicação principal, K8s, Database, recursos RDS/Secrets Manager, API Gateway implantado ou Terraform. A composição da Lambda para produção já está preparada com adapters de PostgreSQL e Secrets Manager, mas seu acesso real depende da infraestrutura externa.
+Este repositório não implementa a aplicação principal, VPC, subnets, NAT, EKS, ALB ou RDS. Ele é responsável pela Lambda, API Gateway REST regional, rotas, VPC Link V2, Security Groups específicos, regras direcionadas aos SGs externos e CloudWatch específicos do Auth. A composição da Lambda para produção já está preparada com adapters de PostgreSQL e Secrets Manager, mas seu acesso real depende da infraestrutura externa.
+
+O Terraform específico do Auth, quando implementado sob `terraform/`, recebe os valores compartilhados por variáveis explícitas. Ele não cria VPC, subnets, NAT Gateway, EKS, ALB, RDS, IAM Role, Secret ou Secret Version e não usa `terraform_remote_state`.
 
 ## Arquitetura
 
@@ -80,7 +82,7 @@ As chaves são obtidas por provider e não ficam hardcoded. O token não inclui 
 - O usuário `oficina_auth` deve ter somente `CONNECT` no banco `oficina`, `USAGE` no schema utilizado e `SELECT` em `atendimento_cliente`; os grants serão provisionados fora deste repositório.
 - A chave privada JWT fica em Secret separado, pertencente ao Auth, identificado por `JWT_PRIVATE_KEY_SECRET_ID`; a resposta do Secrets Manager nunca é registrada.
 - Inputs externos futuros são variáveis explícitas: `vpc_id`, `private_subnet_ids`, `alb_arn`, `alb_security_group_id`, `rds_endpoint`, `rds_port` e `rds_security_group_id`.
-- O ALB é gerenciado pelo Terraform do repositório K8s. `alb_listener_arn` não é usado como input do REST VPC Link V2.
+- O ALB é gerenciado pelo Terraform do repositório K8s; o Auth cria apenas a integração VPC Link e a regra direcionada ao SG externo do ALB. `alb_listener_arn` não é usado como input do REST VPC Link V2.
 
 ## Contrato do POST /auth
 
@@ -149,3 +151,11 @@ As dependências declaradas ficam no `pyproject.toml`; as dependências de runti
 - Mudanças entram exclusivamente por Pull Request.
 
 Não trabalhe diretamente em `develop` ou `main`. Não faça push, merge, deploy ou `terraform apply` sem autorização explícita.
+
+## Divisão de Responsabilidades
+
+- **Auth:** código da Lambda, autenticação por CPF, consulta do Cliente, JWT, API Gateway, rotas, VPC Link, Terraform específico, Security Groups e CloudWatch do Auth.
+- **K8s:** VPC, subnets, NAT, EKS, Kubernetes e ALB compartilhado.
+- **Database:** RDS PostgreSQL e sua configuração.
+- **CI/CD:** workflows, proteção de branches e automação autorizada de plan/apply/deploy.
+- **Observabilidade:** New Relic, dashboards, alertas e observabilidade geral.

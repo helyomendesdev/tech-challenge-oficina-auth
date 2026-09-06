@@ -6,7 +6,7 @@ Aceita em 2026-09-02.
 
 ## Escopo
 
-Este ADR registra somente os contratos consumidos pelo serviço Auth. Os adapters de PostgreSQL e Secrets Manager podem ser implementados aqui; provisionamento de banco, grants, Terraform, VPC Link e demais recursos AWS pertencem às etapas de infraestrutura.
+Este ADR registra os contratos consumidos pelo serviço Auth. Os adapters de PostgreSQL e Secrets Manager e o Terraform específico do Auth podem ser implementados aqui. Provisionamento de RDS, VPC, subnets, NAT, EKS e ALB compartilhados permanece nos repositórios Database e K8s; o Auth não cria esses recursos.
 
 ## Decisão
 
@@ -16,7 +16,7 @@ A Lambda recebe o identificador de credenciais em `DB_SECRET_ID`, aceitando nome
 
 O JWT de Cliente usa `iss=oficina-auth`, `aud=oficina-api` e expiração de 900 segundos. A chave privada fica em Secret separado, pertencente ao Auth, identificado por `JWT_PRIVATE_KEY_SECRET_ID`. Nenhuma chave real é hardcoded ou versionada.
 
-Valores externos são inputs explícitos. Os inputs futuros consumidos pelo Auth são `vpc_id`, `private_subnet_ids`, `alb_arn`, `alb_security_group_id`, `rds_endpoint`, `rds_port` e `rds_security_group_id`. O ALB é gerenciado pelo Terraform do repositório K8s. `alb_listener_arn` não é input do REST VPC Link V2.
+Valores externos são inputs explícitos. Os inputs futuros consumidos pelo Auth são `vpc_id`, `private_subnet_ids`, `alb_arn`, `alb_security_group_id`, `rds_endpoint`, `rds_port` e `rds_security_group_id`. O ALB é gerenciado pelo Terraform do repositório K8s, enquanto o Auth gerencia seu VPC Link e as regras direcionadas aos Security Groups externos. `alb_listener_arn` não é input do REST VPC Link V2.
 
 ## Consequências
 
