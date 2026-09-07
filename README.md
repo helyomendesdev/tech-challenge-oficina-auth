@@ -14,7 +14,15 @@ Responsável técnico: Lucas Marques (`O-marqs`).
 
 Este repositório não implementa a aplicação principal, VPC, subnets, NAT, EKS, ALB ou RDS. Ele é responsável pela Lambda, API Gateway REST regional, rotas, VPC Link V2, Terraform específico, Security Groups específicos, regras direcionadas aos SGs externos e CloudWatch específicos do Auth. A composição da Lambda para produção já está preparada com adapters de PostgreSQL e Secrets Manager, mas seu acesso real depende da infraestrutura externa.
 
-O Terraform específico do Auth, quando implementado sob `terraform/`, recebe os valores compartilhados por variáveis explícitas. Ele não cria VPC, subnets, NAT Gateway, EKS, ALB, RDS, IAM Role, Secret ou Secret Version e não usa `terraform_remote_state`.
+O Terraform específico do Auth já existe sob `terraform/` e recebe os valores compartilhados por variáveis explícitas. Ele não cria VPC, subnets, NAT Gateway, EKS, ALB, RDS, IAM Role, Secret ou Secret Version e não usa `terraform_remote_state`.
+
+## Estado da Entrega
+
+Já estão implementados e validados localmente: o núcleo de autenticação, o handler Lambda de `POST /auth`, adapters PostgreSQL e Secrets Manager, JWT RS256, documentação, testes, build reproduzível e Terraform específico do Auth.
+
+Ainda não foram implantados ou testados contra a AWS: os recursos Terraform, RDS, Secrets Manager, permissões da LabRole, backend durável do state, `terraform plan`, `terraform apply`, deploy e smoke test integrado. Nenhum deploy é pressuposto por este README.
+
+As fronteiras permanecem explícitas: Auth entrega código e infraestrutura específica; K8s entrega VPC, subnets, NAT, EKS e ALB; Database entrega RDS e grants; CI/CD entrega workflows e automação autorizada; Observabilidade entrega New Relic, dashboards e alertas gerais.
 
 ## Arquitetura
 
@@ -24,7 +32,7 @@ A estrutura inicial separa domínio, casos de uso, adaptadores e handlers:
 src/oficina_auth/domain/          Regras de domínio
 src/oficina_auth/application/     Casos de uso
 src/oficina_auth/infrastructure/  Adapters PostgreSQL, Secrets Manager e JWT
-src/oficina_auth/handlers/        Entrypoints futuros
+src/oficina_auth/handlers/        Handler Lambda implementado
 tests/unit/                       Testes unitários
 tests/contract/                   Testes do contrato público
 openapi/                          Contrato OpenAPI
