@@ -1,0 +1,200 @@
+name: CD
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-zip:
+    name: Build Lambda ZIP
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      zip_sha256: ${{ steps.checksum.outputs.sha256 }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+
+      - name: Build Lambda ZIP
+        run: python scripts/build_lambda.py
+
+      - name: Calculate SHA256
+        id: checksum
+        run: |
+          SHA=$(cut -d ' ' -f 1 build/lambda/oficina_auth_lambda.zip.sha256)
+          echo "sha256=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-zip-${{ github.ref_name }}
+          path: build/lambda/oficina_auth_lambda.zip
+          retention-days: 7
+
+  terraform-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive .
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+  terraform-plan:
+    name: Terraform Plan
+    needs: [build-zip, terraform-validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Configure AWS credentials (static)
+        if: ${{ secrets.AWS_ROLE_ARN == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download ZIP artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-zip-${{ github.ref_name }}
+          path: build/lambda/
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=auth/${{ github.ref_name }}/terraform.tfstate" \
+            -backend-config="region=${{ secrets.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
+
+      - name: Select Workspace
+        run: |
+          terraform workspace select ${{ github.ref_name }} || terraform workspace new ${{ github.ref_name }}
+
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var-file=terraform.tfvars.example \
+            -var="lambda_zip_path=../build/lambda/oficina_auth_lambda.zip" \
+            -var="lambda_zip_sha256=${{ needs.build-zip.outputs.zip_sha256 }}" \
+            -var="environment=${{ github.ref_name }}" \
+            -out=tfplan
+
+  terraform-apply:
+    name: Terraform Apply
+    needs: [terraform-plan]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ github.ref_name }}
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Configure AWS credentials (static)
+        if: ${{ secrets.AWS_ROLE_ARN == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download ZIP artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-zip-${{ github.ref_name }}
+          path: build/lambda/
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=auth/${{ github.ref_name }}/terraform.tfstate" \
+            -backend-config="region=${{ secrets.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
+
+      - name: Select Workspace
+        run: |
+          terraform workspace select ${{ github.ref_name }} || terraform workspace new ${{ github.ref_name }}
+
+      - name: Terraform Apply
+        run: |
+          terraform apply \
+            -var-file=terraform.tfvars.example \
+            -var="lambda_zip_path=../build/lambda/oficina_auth_lambda.zip" \
+            -var="lambda_zip_sha256=${{ needs.build-zip.outputs.zip_sha256 }}" \
+            -var="environment=${{ github.ref_name }}" \
+            -auto-approve
