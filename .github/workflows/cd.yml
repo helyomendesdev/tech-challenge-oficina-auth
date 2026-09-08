@@ -127,12 +127,23 @@ jobs:
 
       - name: Terraform Plan
         run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            ENV="producao"
+          else
+            ENV="homologacao"
+          fi
           terraform plan \
-            -var-file=terraform.tfvars.example \
+            -var-file=environments/${ENV}/terraform.tfvars \
             -var="lambda_zip_path=${{ github.workspace }}/build/lambda/oficina_auth_lambda.zip" \
             -var="lambda_zip_sha256=${{ needs.build-zip.outputs.zip_sha256 }}" \
-            -var="environment=${{ github.ref_name }}" \
             -out=tfplan
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.ref_name }}
+          path: terraform/tfplan
+          retention-days: 1
 
   terraform-apply:
     name: Terraform Apply
@@ -141,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      name: ${{ github.ref_name }}
+      name: ${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}
     defaults:
       run:
         working-directory: terraform
@@ -175,6 +186,12 @@ jobs:
           name: lambda-zip-${{ github.ref_name }}
           path: ${{ github.workspace }}/build/lambda/
 
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ github.ref_name }}
+          path: terraform/
+
       - name: Terraform Init
         run: |
           terraform init \
@@ -190,8 +207,6 @@ jobs:
       - name: Terraform Apply
         run: |
           terraform apply \
-            -var-file=terraform.tfvars.example \
-            -var="lambda_zip_path=${{ github.workspace }}/build/lambda/oficina_auth_lambda.zip" \
-            -var="lambda_zip_sha256=${{ needs.build-zip.outputs.zip_sha256 }}" \
-            -var="environment=${{ github.ref_name }}" \
-            -auto-approve
+            -input=false \
+            -auto-approve \
+            tfplan
