@@ -20,9 +20,6 @@ jobs:
     timeout-minutes: 10
     outputs:
       zip_sha256: ${{ steps.checksum.outputs.sha256 }}
-    defaults:
-      run:
-        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
 
@@ -114,7 +111,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: lambda-zip-${{ github.ref_name }}
-          path: build/lambda/
+          path: ${{ github.workspace }}/build/lambda/
 
       - name: Terraform Init
         run: |
@@ -132,7 +129,7 @@ jobs:
         run: |
           terraform plan \
             -var-file=terraform.tfvars.example \
-            -var="lambda_zip_path=../build/lambda/oficina_auth_lambda.zip" \
+            -var="lambda_zip_path=${{ github.workspace }}/build/lambda/oficina_auth_lambda.zip" \
             -var="lambda_zip_sha256=${{ needs.build-zip.outputs.zip_sha256 }}" \
             -var="environment=${{ github.ref_name }}" \
             -out=tfplan
@@ -176,7 +173,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: lambda-zip-${{ github.ref_name }}
-          path: build/lambda/
+          path: ${{ github.workspace }}/build/lambda/
 
       - name: Terraform Init
         run: |
@@ -194,7 +191,7 @@ jobs:
         run: |
           terraform apply \
             -var-file=terraform.tfvars.example \
-            -var="lambda_zip_path=../build/lambda/oficina_auth_lambda.zip" \
+            -var="lambda_zip_path=${{ github.workspace }}/build/lambda/oficina_auth_lambda.zip" \
             -var="lambda_zip_sha256=${{ needs.build-zip.outputs.zip_sha256 }}" \
             -var="environment=${{ github.ref_name }}" \
             -auto-approve
