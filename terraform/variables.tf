@@ -1,0 +1,257 @@
+variable "aws_region" {
+  description = "AWS region where Auth resources are provisioned."
+  type        = string
+
+  validation {
+    condition     = trimspace(var.aws_region) != ""
+    error_message = "aws_region must not be empty."
+  }
+}
+
+variable "environment" {
+  description = "Deployment environment used in names and tags."
+  type        = string
+
+  validation {
+    condition     = contains(["dev", "homologacao", "producao"], var.environment)
+    error_message = "environment must be one of dev, homologacao, or producao."
+  }
+}
+
+variable "vpc_id" {
+  description = "Existing shared VPC ID supplied by the K8s infrastructure."
+  type        = string
+
+  validation {
+    condition     = can(regex("^vpc-[0-9a-fA-F]+$", var.vpc_id))
+    error_message = "vpc_id must be a VPC ID."
+  }
+}
+
+variable "private_subnet_ids" {
+  description = "Existing private subnet IDs supplied by the K8s infrastructure."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.private_subnet_ids) > 0 && alltrue([for id in var.private_subnet_ids : can(regex("^subnet-[0-9a-fA-F]+$", id))])
+    error_message = "private_subnet_ids must contain at least one valid subnet ID."
+  }
+}
+
+variable "lambda_execution_role_arn" {
+  description = "Existing execution role ARN; this repository does not create IAM roles."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.lambda_execution_role_arn))
+    error_message = "lambda_execution_role_arn must be an IAM role ARN."
+  }
+}
+
+variable "rds_endpoint" {
+  description = "Existing PostgreSQL endpoint supplied by the Database infrastructure."
+  type        = string
+
+  validation {
+    condition     = trimspace(var.rds_endpoint) != "" && !strcontains(var.rds_endpoint, " ")
+    error_message = "rds_endpoint must be a non-empty host without spaces."
+  }
+}
+
+variable "rds_port" {
+  description = "Existing PostgreSQL port supplied by the Database infrastructure."
+  type        = number
+
+  validation {
+    condition     = var.rds_port >= 1 && var.rds_port <= 65535
+    error_message = "rds_port must be between 1 and 65535."
+  }
+}
+
+variable "rds_security_group_id" {
+  description = "Existing RDS Security Group ID that receives the Lambda rule."
+  type        = string
+
+  validation {
+    condition     = can(regex("^sg-[0-9a-fA-F]+$", var.rds_security_group_id))
+    error_message = "rds_security_group_id must be a Security Group ID."
+  }
+}
+
+variable "alb_arn" {
+  description = "Existing internal ALB ARN supplied by the K8s infrastructure."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:[^:]+:elasticloadbalancing:[^:]+:[0-9]{12}:loadbalancer/.+$", var.alb_arn))
+    error_message = "alb_arn must be an Application Load Balancer ARN."
+  }
+}
+
+variable "alb_dns_name" {
+  description = "Existing internal ALB DNS name supplied by the K8s infrastructure."
+  type        = string
+
+  validation {
+    condition     = trimspace(var.alb_dns_name) != "" && !strcontains(var.alb_dns_name, " ")
+    error_message = "alb_dns_name must be a non-empty host without spaces."
+  }
+}
+
+variable "alb_security_group_id" {
+  description = "Existing ALB Security Group ID that receives the VPC Link rule."
+  type        = string
+
+  validation {
+    condition     = can(regex("^sg-[0-9a-fA-F]+$", var.alb_security_group_id))
+    error_message = "alb_security_group_id must be a Security Group ID."
+  }
+}
+
+variable "alb_port" {
+  description = "Existing ALB listener port."
+  type        = number
+
+  validation {
+    condition     = var.alb_port >= 1 && var.alb_port <= 65535
+    error_message = "alb_port must be between 1 and 65535."
+  }
+}
+
+variable "alb_protocol" {
+  description = "Existing ALB listener protocol used to construct the private integration URI."
+  type        = string
+
+  validation {
+    condition     = contains(["HTTP", "HTTPS"], upper(var.alb_protocol))
+    error_message = "alb_protocol must be HTTP or HTTPS."
+  }
+}
+
+variable "db_secret_id" {
+  description = "Name or ARN of the existing oficina-auth database Secret."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9/_+=.@:-]{1,512}$", var.db_secret_id))
+    error_message = "db_secret_id must be a Secret name or ARN, not Secret content."
+  }
+}
+
+variable "jwt_private_key_secret_id" {
+  description = "Name or ARN of the separate existing private-key Secret."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9/_+=.@:-]{1,512}$", var.jwt_private_key_secret_id))
+    error_message = "jwt_private_key_secret_id must be a Secret name or ARN, not Secret content."
+  }
+}
+
+variable "postgres_db" {
+  description = "Authentication database name."
+  type        = string
+  default     = "oficina"
+
+  validation {
+    condition     = var.postgres_db == "oficina"
+    error_message = "postgres_db must be exactly oficina."
+  }
+}
+
+variable "lambda_zip_path" {
+  description = "Path to the reproducible Lambda ZIP generated by scripts/build_lambda.py."
+  type        = string
+
+  validation {
+    condition     = trimspace(var.lambda_zip_path) != "" && endswith(lower(var.lambda_zip_path), ".zip")
+    error_message = "lambda_zip_path must point to a ZIP file."
+  }
+}
+
+variable "lambda_zip_sha256" {
+  description = "Expected hexadecimal SHA-256 checksum emitted by the Lambda build."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{64}$", var.lambda_zip_sha256))
+    error_message = "lambda_zip_sha256 must be a 64-character hexadecimal SHA-256."
+  }
+}
+
+variable "lambda_memory_size" {
+  description = "Lambda memory in MB."
+  type        = number
+  default     = 512
+
+  validation {
+    condition     = var.lambda_memory_size >= 128 && var.lambda_memory_size <= 10240
+    error_message = "lambda_memory_size must be between 128 and 10240 MB."
+  }
+}
+
+variable "lambda_timeout_seconds" {
+  description = "Lambda timeout in seconds."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.lambda_timeout_seconds >= 1 && var.lambda_timeout_seconds <= 900
+    error_message = "lambda_timeout_seconds must be between 1 and 900 seconds."
+  }
+}
+
+variable "lambda_log_retention_days" {
+  description = "CloudWatch retention for the Lambda log group."
+  type        = number
+  default     = 14
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.lambda_log_retention_days)
+    error_message = "lambda_log_retention_days must be a supported CloudWatch retention value."
+  }
+}
+
+variable "lambda_architecture" {
+  description = "Lambda instruction-set architecture; x86_64 matches the current manylinux build."
+  type        = string
+  default     = "x86_64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be x86_64 or arm64."
+  }
+}
+
+variable "stage_name" {
+  description = "API Gateway REST stage name."
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{1,128}$", var.stage_name))
+    error_message = "stage_name must contain only letters, numbers, underscores, or hyphens and be at most 128 characters."
+  }
+}
+
+variable "api_gateway_access_log_group_arn" {
+  description = "Optional existing CloudWatch Log Group ARN; account-level API Gateway logging role is external."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.api_gateway_access_log_group_arn == null || can(regex("^arn:[^:]+:logs:[^:]+:[0-9]{12}:log-group:.+$", var.api_gateway_access_log_group_arn))
+    error_message = "api_gateway_access_log_group_arn must be an existing CloudWatch Log Group ARN when provided."
+  }
+}
+
+variable "tags" {
+  description = "Additional non-sensitive tags."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for key, value in var.tags : trimspace(key) != "" && trimspace(value) != ""])
+    error_message = "tags must not contain empty keys or values."
+  }
+}

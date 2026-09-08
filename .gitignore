@@ -1,0 +1,60 @@
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.tox/
+.nox/
+
+# Coverage, logs, and local reports
+.coverage
+coverage.xml
+htmlcov/
+*.cover
+*.log
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+*.zip
+*.sha256
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Terraform state, plans, local overrides, and provider working directory
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+**/terraform.tfvars
+!terraform/terraform.tfvars.example
+**/terraform.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log

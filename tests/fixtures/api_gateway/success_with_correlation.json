@@ -1,0 +1,22 @@
+{
+  "resource": "/auth",
+  "path": "/auth",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Correlation-Id": "123e4567-e89b-42d3-a456-426614174000",
+    "X-Request-Id": "synthetic-request-success-001"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "requestId": "gateway-request-success-001",
+    "resourcePath": "/auth",
+    "httpMethod": "POST"
+  },
+  "body": "{\"cpf\":\"529.982.247-25\"}",
+  "isBase64Encoded": false
+}
