@@ -109,6 +109,36 @@ jobs:
         if: steps.python.outputs.present == 'true'
         run: python -m compileall -q .
 
+      - name: Run lint
+        if: steps.python.outputs.present == 'true'
+        run: ruff check .
+
+      - name: Check formatting
+        if: steps.python.outputs.present == 'true'
+        run: ruff format --check .
+
       - name: Run tests
         if: steps.python.outputs.present == 'true'
-        run: python -m pytest -q
+        run: python -m pytest --cov=oficina_auth --cov-report=term-missing --cov-fail-under=90
+
+      - name: Run local authentication demo
+        if: steps.python.outputs.present == 'true'
+        run: python scripts/invoke_local.py
+
+      - name: Build Lambda ZIP
+        if: steps.python.outputs.present == 'true'
+        shell: bash
+        run: |
+          python scripts/build_lambda.py
+          first_checksum="$(cut -d ' ' -f 1 build/lambda/oficina_auth_lambda.zip.sha256)"
+          python scripts/build_lambda.py
+          second_checksum="$(cut -d ' ' -f 1 build/lambda/oficina_auth_lambda.zip.sha256)"
+
+          if [[ "$first_checksum" != "$second_checksum" ]]; then
+            echo "::error::Lambda ZIP is not reproducible."
+            exit 1
+          fi
+
+      - name: Inspect Lambda ZIP
+        if: steps.python.outputs.present == 'true'
+        run: python scripts/inspect_lambda_zip.py build/lambda/oficina_auth_lambda.zip

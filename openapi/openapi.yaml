@@ -1,0 +1,175 @@
+openapi: 3.0.3
+info:
+  title: Tech Challenge Oficina Authentication API
+  version: 0.1.0
+  description: Contract for CPF-based client authentication.
+servers:
+  - url: https://auth.example.invalid
+    description: Synthetic example endpoint
+paths:
+  /auth:
+    post:
+      summary: Authenticate a client by CPF
+      operationId: authenticateClient
+      tags:
+        - Authentication
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRequest"
+            examples:
+              syntheticClient:
+                summary: Synthetic CPF only
+                value:
+                  cpf: "00000000000"
+      responses:
+        "200":
+          description: Client authenticated successfully.
+          headers:
+            X-Correlation-Id:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSuccessResponse"
+              examples:
+                syntheticToken:
+                  summary: Synthetic token response
+                  value:
+                    access_token: "synthetic.jwt.value"
+                    token_type: "Bearer"
+                    expires_in: 900
+        "400":
+          description: Request payload or CPF is invalid.
+          headers:
+            X-Correlation-Id:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidPayload:
+                  summary: Invalid synthetic request
+                  value:
+                    message: "Payload ou CPF invalido."
+        "401":
+          description: Client does not exist or is not eligible.
+          headers:
+            X-Correlation-Id:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                genericUnauthorized:
+                  summary: Generic synthetic authorization failure
+                  value:
+                    message: "Credenciais invalidas ou cliente nao elegivel."
+        "503":
+          description: Required dependency is unavailable.
+          headers:
+            X-Correlation-Id:
+              $ref: "#/components/headers/CorrelationId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                dependencyUnavailable:
+                  summary: Synthetic dependency failure
+                  value:
+                    message: "Dependencia temporariamente indisponivel."
+components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: Existing UUIDv4 correlation identifier. Invalid or absent values are replaced.
+      schema:
+        type: string
+        format: uuid
+      example: "123e4567-e89b-42d3-a456-426614174000"
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Request-scoped identifier propagated for diagnostics.
+      schema:
+        type: string
+      example: "synthetic-request-001"
+    Traceparent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C trace context header propagated when received.
+      schema:
+        type: string
+      example: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+    Tracestate:
+      name: tracestate
+      in: header
+      required: false
+      description: W3C trace state propagated only when received.
+      schema:
+        type: string
+      example: "vendor=value"
+  headers:
+    CorrelationId:
+      description: Correlation identifier returned with every response.
+      schema:
+        type: string
+        format: uuid
+      example: "123e4567-e89b-42d3-a456-426614174000"
+  schemas:
+    AuthRequest:
+      type: object
+      required:
+        - cpf
+      additionalProperties: false
+      properties:
+        cpf:
+          type: string
+          description: CPF containing only digits.
+          pattern: "^[0-9]{11}$"
+          example: "00000000000"
+    AuthSuccessResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+      additionalProperties: false
+      properties:
+        access_token:
+          type: string
+          description: Synthetic JWT bearer token.
+          example: "synthetic.jwt.value"
+        token_type:
+          type: string
+          enum:
+            - Bearer
+          example: Bearer
+        expires_in:
+          type: integer
+          enum:
+            - 900
+          example: 900
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      additionalProperties: false
+      properties:
+        message:
+          type: string
+          example: "Mensagem sintetica."
