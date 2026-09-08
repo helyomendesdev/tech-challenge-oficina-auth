@@ -4,6 +4,12 @@ on:
   push:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      authorize_apply:
+        description: "Authorize Terraform apply for this run"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -80,11 +86,73 @@ jobs:
     needs: [build-zip, terraform-validate]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment:
+      name: ${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+      VPC_ID: ${{ vars.VPC_ID }}
+      PRIVATE_SUBNET_IDS: ${{ vars.PRIVATE_SUBNET_IDS_JSON }}
+      LAMBDA_EXECUTION_ROLE_ARN: ${{ vars.LAMBDA_EXECUTION_ROLE_ARN }}
+      RDS_ENDPOINT: ${{ vars.RDS_ENDPOINT }}
+      RDS_PORT: ${{ vars.RDS_PORT }}
+      RDS_SECURITY_GROUP_ID: ${{ vars.RDS_SECURITY_GROUP_ID }}
+      ALB_ARN: ${{ vars.ALB_ARN }}
+      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+      ALB_SECURITY_GROUP_ID: ${{ vars.ALB_SECURITY_GROUP_ID }}
+      ALB_PORT: ${{ vars.ALB_PORT }}
+      ALB_PROTOCOL: ${{ vars.ALB_PROTOCOL }}
+      DB_SECRET_ID: ${{ vars.DB_SECRET_ID }}
+      JWT_PRIVATE_KEY_SECRET_ID: ${{ vars.JWT_PRIVATE_KEY_SECRET_ID }}
+      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+      STAGE_NAME: ${{ vars.STAGE_NAME }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_environment: ${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}
+      TF_VAR_vpc_id: ${{ vars.VPC_ID }}
+      TF_VAR_private_subnet_ids: ${{ vars.PRIVATE_SUBNET_IDS_JSON }}
+      TF_VAR_lambda_execution_role_arn: ${{ vars.LAMBDA_EXECUTION_ROLE_ARN }}
+      TF_VAR_rds_endpoint: ${{ vars.RDS_ENDPOINT }}
+      TF_VAR_rds_port: ${{ vars.RDS_PORT }}
+      TF_VAR_rds_security_group_id: ${{ vars.RDS_SECURITY_GROUP_ID }}
+      TF_VAR_alb_arn: ${{ vars.ALB_ARN }}
+      TF_VAR_alb_dns_name: ${{ vars.ALB_DNS_NAME }}
+      TF_VAR_alb_security_group_id: ${{ vars.ALB_SECURITY_GROUP_ID }}
+      TF_VAR_alb_port: ${{ vars.ALB_PORT }}
+      TF_VAR_alb_protocol: ${{ vars.ALB_PROTOCOL }}
+      TF_VAR_db_secret_id: ${{ vars.DB_SECRET_ID }}
+      TF_VAR_jwt_private_key_secret_id: ${{ vars.JWT_PRIVATE_KEY_SECRET_ID }}
+      TF_VAR_postgres_db: ${{ vars.POSTGRES_DB }}
+      TF_VAR_stage_name: ${{ vars.STAGE_NAME }}
     defaults:
       run:
         working-directory: terraform
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check AWS credentials and Terraform inputs
+        run: |
+          missing=()
+          for name in AWS_REGION TF_STATE_BUCKET TF_LOCK_TABLE VPC_ID PRIVATE_SUBNET_IDS LAMBDA_EXECUTION_ROLE_ARN RDS_ENDPOINT RDS_PORT RDS_SECURITY_GROUP_ID ALB_ARN ALB_DNS_NAME ALB_SECURITY_GROUP_ID ALB_PORT ALB_PROTOCOL DB_SECRET_ID JWT_PRIVATE_KEY_SECRET_ID POSTGRES_DB STAGE_NAME; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ -z "${AWS_ROLE_ARN:-}" ] && { [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ] || [ -z "${AWS_SESSION_TOKEN:-}" ]; }; then
+            missing+=("AWS_ROLE_ARN or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN")
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Terraform plan/apply bloqueado: faltam credenciais ou GitHub Variables no environment %s:\n' "${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}"
+            printf ' - %s\n' "${missing[@]}"
+            echo 'O workflow continua somente com validação Terraform sem acesso à AWS.'
+            exit 1
+          fi
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -92,20 +160,20 @@ jobs:
           terraform_version: "1.5.0"
 
       - name: Configure AWS credentials (OIDC)
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: ${{ env.AWS_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Configure AWS credentials (static)
-        if: ${{ secrets.AWS_ROLE_ARN == '' }}
+        if: ${{ env.AWS_ROLE_ARN == '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Download ZIP artifact
         uses: actions/download-artifact@v4
@@ -116,27 +184,20 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="key=auth/${{ github.ref_name }}/terraform.tfstate" \
-            -backend-config="region=${{ secrets.AWS_REGION }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}"
 
       - name: Select Workspace
         run: |
           terraform workspace select ${{ github.ref_name }} || terraform workspace new ${{ github.ref_name }}
 
       - name: Terraform Plan
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            ENV="producao"
-          else
-            ENV="homologacao"
-          fi
-          terraform plan \
-            -var-file=environments/${ENV}/terraform.tfvars \
-            -var="lambda_zip_path=${{ github.workspace }}/build/lambda/oficina_auth_lambda.zip" \
-            -var="lambda_zip_sha256=${{ needs.build-zip.outputs.zip_sha256 }}" \
-            -out=tfplan
+        env:
+          TF_VAR_lambda_zip_path: ${{ github.workspace }}/build/lambda/oficina_auth_lambda.zip
+          TF_VAR_lambda_zip_sha256: ${{ needs.build-zip.outputs.zip_sha256 }}
+        run: terraform plan -input=false -out=tfplan
 
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
@@ -148,11 +209,19 @@ jobs:
   terraform-apply:
     name: Terraform Apply
     needs: [terraform-plan]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.event_name == 'workflow_dispatch' && inputs.authorize_apply == true && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
       name: ${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
     defaults:
       run:
         working-directory: terraform
@@ -165,20 +234,20 @@ jobs:
           terraform_version: "1.5.0"
 
       - name: Configure AWS credentials (OIDC)
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: ${{ env.AWS_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Configure AWS credentials (static)
-        if: ${{ secrets.AWS_ROLE_ARN == '' }}
+        if: ${{ env.AWS_ROLE_ARN == '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Download ZIP artifact
         uses: actions/download-artifact@v4
@@ -195,10 +264,10 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="key=auth/${{ github.ref_name }}/terraform.tfstate" \
-            -backend-config="region=${{ secrets.AWS_REGION }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}"
 
       - name: Select Workspace
         run: |
