@@ -21,8 +21,8 @@ INSUFFICIENT_PRIVILEGE_SQLSTATE = "42501"
 LOOKUP_SQL = """
 SELECT id, ativo
 FROM atendimento_cliente
-WHERE cpf = %s OR cpf = %s
-ORDER BY CASE WHEN cpf = %s THEN 0 ELSE 1 END
+WHERE documento = %s OR documento = %s
+ORDER BY CASE WHEN documento = %s THEN 0 ELSE 1 END
 LIMIT 1
 """.strip()
 TRACELESS_SECRET_ARN = re.compile(r":secret:oficina-auth(?:-[A-Za-z0-9]+)?$")
@@ -107,7 +107,7 @@ def _run_smoke_test(environment: Mapping[str, str]) -> None:
 def _connect(**kwargs: Any) -> Any:
     from pg8000 import dbapi
 
-    return dbapi.connect(**kwargs)
+    return dbapi.connect(ssl_context=True, **kwargs)
 
 
 def _verify_client_lookup(cursor: Any, cpf: CPF, expected_client_id: str) -> None:
@@ -124,7 +124,11 @@ def _verify_client_lookup(cursor: Any, cpf: CPF, expected_client_id: str) -> Non
 
 def _verify_write_permissions(cursor: Any, connection: Any, cpf: CPF) -> None:
     statements = (
-        ("INSERT", "INSERT INTO atendimento_cliente (cpf) SELECT %s WHERE false", (cpf.digits,)),
+        (
+            "INSERT",
+            "INSERT INTO atendimento_cliente (documento) SELECT %s WHERE false",
+            (cpf.digits,),
+        ),
         ("UPDATE", "UPDATE atendimento_cliente SET ativo = ativo WHERE false", ()),
         ("DELETE", "DELETE FROM atendimento_cliente WHERE false", ()),
     )

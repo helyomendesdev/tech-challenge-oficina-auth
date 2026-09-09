@@ -1,10 +1,10 @@
+# Rules live in the standalone aws_vpc_security_group_*_rule resources below.
+# Do not add inline ingress/egress blocks (even empty ones): every apply would
+# reconcile them and wipe the standalone rules, leaving Lambda and VPC Link without egress.
 resource "aws_security_group" "lambda" {
   name        = "${local.name_prefix}-lambda-sg"
   description = "Egress restricted to Auth dependencies."
   vpc_id      = var.vpc_id
-
-  ingress = []
-  egress  = []
 
   tags = merge(local.tags, {
     Name = "${local.name_prefix}-lambda-sg"
@@ -15,9 +15,6 @@ resource "aws_security_group" "vpc_link" {
   name        = "${local.name_prefix}-vpc-link-sg"
   description = "Egress restricted to the existing internal ALB."
   vpc_id      = var.vpc_id
-
-  ingress = []
-  egress  = []
 
   tags = merge(local.tags, {
     Name = "${local.name_prefix}-vpc-link-sg"

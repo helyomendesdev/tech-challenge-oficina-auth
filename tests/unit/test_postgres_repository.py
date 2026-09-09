@@ -129,6 +129,8 @@ def test_lookup_is_parameterized_and_supports_normalized_and_legacy_cpf() -> Non
     assert params == (VALID_CPF, "529.982.247-25", VALID_CPF)
     assert "atendimento_cliente" in sql
     assert "SELECT id, ativo" in sql
+    assert "WHERE documento = %s OR documento = %s" in sql
+    assert "cpf" not in sql.lower()
 
 
 def test_connection_receives_short_timeout_and_secret_credentials() -> None:
@@ -145,6 +147,25 @@ def test_connection_receives_short_timeout_and_secret_credentials() -> None:
         "database": "oficina",
         "timeout": 2.0,
     }
+
+
+def test_default_connection_factory_enforces_tls(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pg8000.dbapi
+
+    from oficina_auth.infrastructure import postgres_client_repository as module
+
+    captured: dict[str, object] = {}
+
+    def fake_connect(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(pg8000.dbapi, "connect", fake_connect)
+
+    module._connect_with_pg8000(host="db.internal", port=5432, user="u", password="p")
+
+    assert captured["ssl_context"] is True
+    assert captured["host"] == "db.internal"
 
 
 def test_connection_refused_is_generic_and_closes_resources() -> None:
