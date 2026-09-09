@@ -15,20 +15,20 @@ class CPF:
 
     def __init__(self, value: str) -> None:
         if not isinstance(value, str):
-            raise InvalidInput("CPF invalido.")
+            raise InvalidInput("CPF invalido.", reason="cpf_invalido")
 
         if not _CPF_FORMAT.fullmatch(value):
-            raise InvalidInput("CPF invalido.")
+            raise InvalidInput("CPF invalido.", reason="cpf_invalido")
 
         digits = _DIGITS_ONLY.sub("", value)
         if len(digits) != 11:
-            raise InvalidInput("CPF invalido.")
+            raise InvalidInput("CPF invalido.", reason="cpf_invalido")
 
         if len(set(digits)) == 1:
-            raise InvalidInput("CPF invalido.")
+            raise InvalidInput("CPF invalido.", reason="cpf_invalido")
 
         if not self._has_valid_check_digits(digits):
-            raise InvalidInput("CPF invalido.")
+            raise InvalidInput("CPF invalido.", reason="cpf_invalido")
 
         object.__setattr__(self, "digits", digits)
 

@@ -12,7 +12,7 @@ Cliente
   +--> demais rotas --> VPC Link V2 --> ALB interno --> EKS/Django
 ```
 
-O Auth cria a Lambda, API Gateway, recursos `/auth` e `/{proxy+}`, VPC Link V2, Security Groups próprios, regras direcionadas aos Security Groups externos e Log Group da Lambda. O `POST /auth` usa integração `AWS_PROXY` direta. A raiz e o proxy usam `HTTP_PROXY` privado com `integration_target = alb_arn`.
+O Auth cria a Lambda, API Gateway, recursos `/auth` e `/{proxy+}`, VPC Link V2, Security Groups próprios, regras direcionadas aos Security Groups externos, Log Groups da Lambda e de access log do API Gateway. O `POST /auth` usa integração `AWS_PROXY` direta. A raiz e o proxy usam `HTTP_PROXY` privado com `integration_target = alb_arn`.
 
 O nome do stage é removido do path por templates de override do API Gateway. O proxy preserva o path original, query string, body e headers. `Authorization`, `X-Correlation-Id`, `X-Request-Id`, `traceparent` e `tracestate` não são remapeados nem fabricados pelo gateway. A rota explícita `/auth` tem precedência sobre `/{proxy+}`.
 
@@ -22,9 +22,13 @@ O ALB é interno, HTTP na porta `8000`, com Target Group/NodePort `30080` e heal
 
 - K8s fornece `vpc_id`, subnets privadas, `alb_arn`, `alb_dns_name` e `alb_security_group_id`, além de NAT para a saída HTTPS da Lambda.
 - Database fornece `rds_endpoint`, `rds_port` e `rds_security_group_id`.
-- O Auth recebe `lambda_execution_role_arn`, `db_secret_id` e `jwt_private_key_secret_id`, mas não cria IAM Role, Secret ou Secret Version.
+- O Auth recebe `lambda_execution_role_arn`, `db_secret_id`, `jwt_private_key_secret_id` e o identificador do Secret de licença New Relic, mas não cria IAM Role, Secret ou Secret Version.
 - O Secret `oficina-auth` é lido em runtime pela aplicação e deve conter o usuário `oficina_auth`; o Terraform apenas injeta seu identificador.
 - A chave privada JWT fica em Secret separado. O código aplica `iss=oficina-auth`, `aud=oficina-api` e expiração de 900 segundos.
+- A configuração canônica aceita `environment = "homologacao"` ou `"producao"`. O serviço usa esses valores em `APP_ENV` e `service.environment`; o tag AWS `Environment` e os nomes de recursos usam `hml` ou `prd`, respectivamente. A Lambda resulta em `oficina-auth-cpf-hml` ou `oficina-auth-cpf-prd`.
+- A alteração dos nomes para o contrato `oficina-auth-cpf-hml/prd` deve ser revisada no primeiro plano; este módulo não renomeia workspaces nem state existentes silenciosamente.
+- O throttling de `POST /auth` é agregado no método do stage e parametrizado por `auth_throttle_rate_limit` e `auth_throttle_burst_limit`; ele não é uma limitação individual por IP. Uma política por IP, se exigida, deve ser decidida e implementada fora desta mudança.
+- New Relic usa `new_relic_account_id`, `new_relic_layer_arn` e `new_relic_license_key_secret_id`. Os valores alinhados são `8430077`, `arn:aws:lambda:us-east-1:451483290750:layer:NewRelicPython311:90` e `oficina/newrelic-license` como exemplo de identificador. A licença não entra no Terraform nem em `NEW_RELIC_LICENSE_KEY`; o runtime recebe apenas `NEW_RELIC_LICENSE_KEY_SECRET`.
 - A saída para Secrets Manager/New Relic depende do NAT das subnets privadas. Este módulo não cria NAT Gateway ou VPC Endpoint.
 
 As regras da Lambda para o SG do RDS e do VPC Link para o SG do ALB são independentes e restritas às portas configuradas. Nenhuma regra abre PostgreSQL ou ALB para `0.0.0.0/0`.
@@ -58,7 +62,9 @@ terraform apply
 
 Eles devem ser executados somente pelo workflow autorizado do Hélio. Este repositório não executa AWS CLI nem acessa Secrets durante a validação local.
 
-Access logs do REST API são opcionais: `api_gateway_access_log_group_arn` aponta para um Log Group existente, mas a role de logging no nível da conta deve ser configurada externamente. Nenhuma role é inventada neste módulo.
+O Auth cria o Log Group de access logs do REST API com retenção configurável e o stage o habilita por padrão. O formato JSON contém `requestId`, `httpMethod`, `path`, `status`, `responseLatency`, `integrationLatency`, `error.message` e `service.environment`. A role de logging no nível da conta do API Gateway deve ser configurada externamente; nenhuma role é inventada neste módulo.
+
+O layer New Relic usa `newrelic_lambda_wrapper.handler` como handler da função, preservando `oficina_auth.handlers.auth.lambda_handler` em `NEW_RELIC_LAMBDA_HANDLER`. Também são configurados `NEW_RELIC_ACCOUNT_ID`, `NEW_RELIC_APP_NAME`, `NEW_RELIC_APM_LAMBDA_MODE`, `NEW_RELIC_LAMBDA_EXTENSION_ENABLED`, `NEW_RELIC_EXTENSION_SEND_FUNCTION_LOGS` e `NEW_RELIC_LICENSE_KEY_SECRET`, além da tag `NR.Apm.Lambda.Mode=true`. A role de execução externa da Lambda precisa de `secretsmanager:GetSecretValue` limitado ao Secret da licença e aos Secrets de banco/chave; o código e os logs não contêm CPF, token, `Authorization` ou conteúdo de Secret. Consulte a [documentação oficial de variáveis da New Relic](https://docs.newrelic.com/docs/serverless-function-monitoring/aws-lambda-monitoring/instrument-lambda-function/env-variables-lambda/) e o [guia oficial de instrumentação](https://docs.newrelic.com/docs/serverless-function-monitoring/aws-lambda-monitoring/instrument-lambda-function/instrument-your-own/).
 
 ## Rollback e AWS Academy
 

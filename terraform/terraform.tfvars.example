@@ -1,5 +1,5 @@
 aws_region = "us-east-1"
-environment = "dev"
+environment = "homologacao"
 
 vpc_id             = "vpc-0123456789abcdef0"
 private_subnet_ids = ["subnet-0123456789abcdef0", "subnet-0123456789abcdef1"]
@@ -19,6 +19,9 @@ alb_protocol        = "HTTP"
 db_secret_id               = "oficina-auth-example"
 jwt_private_key_secret_id  = "oficina-auth-jwt-key-example"
 postgres_db                = "oficina"
+new_relic_account_id       = 8430077
+new_relic_layer_arn        = "arn:aws:lambda:us-east-1:451483290750:layer:NewRelicPython311:90"
+new_relic_license_key_secret_id = "oficina/newrelic-license"
 
 lambda_zip_path   = "../build/lambda/oficina_auth_lambda.zip"
 lambda_zip_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
@@ -27,11 +30,10 @@ lambda_memory_size        = 512
 lambda_timeout_seconds    = 10
 lambda_log_retention_days = 14
 lambda_architecture       = "x86_64"
-stage_name                = "dev"
-
-# Access logging requires an existing Log Group and an API Gateway account role
-# configured outside this repository. Leave null until that contract exists.
-api_gateway_access_log_group_arn = null
+stage_name                        = "hml"
+auth_throttle_rate_limit          = 10
+auth_throttle_burst_limit         = 20
+api_gateway_access_log_retention_days = 14
 
 tags = {
   Owner      = "Lucas"

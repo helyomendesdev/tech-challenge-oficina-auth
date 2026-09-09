@@ -19,7 +19,7 @@ class AuthenticateClient:
 
     def execute(self, cpf_value: str | None) -> AuthenticationResult:
         if cpf_value is None:
-            raise InvalidInput("CPF invalido.")
+            raise InvalidInput("CPF invalido.", reason="cpf_invalido")
 
         cpf = CPF(cpf_value)
 
@@ -30,8 +30,14 @@ class AuthenticateClient:
         except Exception:
             raise DependencyUnavailable("Dependencia temporariamente indisponivel.") from None
 
-        if client is None or not client.can_authenticate:
-            raise InvalidCredentials("Credenciais invalidas ou cliente nao elegivel.")
+        if client is None:
+            raise InvalidCredentials(
+                "Credenciais invalidas ou cliente nao elegivel.", reason="nao_encontrado"
+            )
+        if not client.can_authenticate:
+            raise InvalidCredentials(
+                "Credenciais invalidas ou cliente nao elegivel.", reason="inativo"
+            )
 
         access_token = self._token_issuer.issue(client.cliente_id)
         return AuthenticationResult(access_token=access_token)

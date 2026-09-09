@@ -1,11 +1,14 @@
 locals {
-  name_prefix = "oficina-auth-${var.environment}"
+  environment_suffix  = var.environment == "homologacao" ? "hml" : "prd"
+  service_environment = var.environment
+  name_prefix         = "oficina-auth-cpf-${local.environment_suffix}"
 
   tags = merge(var.tags, {
-    Project     = "tech-challenge-oficina"
-    Component   = "auth"
-    Environment = var.environment
-    ManagedBy   = "terraform"
+    Project            = "tech-challenge-oficina"
+    Component          = "auth"
+    Environment        = local.environment_suffix
+    ServiceEnvironment = local.service_environment
+    ManagedBy          = "terraform"
   })
 
   alb_uri = format(
@@ -25,13 +28,32 @@ locals {
   )
 
   lambda_environment = {
-    APP_ENV                   = var.environment
-    DB_HOST                   = var.rds_endpoint
-    DB_PORT                   = tostring(var.rds_port)
-    POSTGRES_DB               = var.postgres_db
-    DB_SECRET_ID              = var.db_secret_id
-    JWT_PRIVATE_KEY_SECRET_ID = var.jwt_private_key_secret_id
+    APP_ENV                                = var.environment
+    DB_HOST                                = var.rds_endpoint
+    DB_PORT                                = tostring(var.rds_port)
+    POSTGRES_DB                            = var.postgres_db
+    DB_SECRET_ID                           = var.db_secret_id
+    JWT_PRIVATE_KEY_SECRET_ID              = var.jwt_private_key_secret_id
+    NEW_RELIC_ACCOUNT_ID                   = tostring(var.new_relic_account_id)
+    NEW_RELIC_APP_NAME                     = local.name_prefix
+    NEW_RELIC_APM_LAMBDA_MODE              = "true"
+    NEW_RELIC_LAMBDA_EXTENSION_ENABLED     = "true"
+    NEW_RELIC_EXTENSION_SEND_FUNCTION_LOGS = "true"
+    NEW_RELIC_LAMBDA_HANDLER               = "oficina_auth.handlers.auth.lambda_handler"
+    NEW_RELIC_LICENSE_KEY_SECRET           = var.new_relic_license_key_secret_id
   }
+
+  api_gateway_access_log_format = jsonencode({
+    requestId             = "$context.requestId"
+    extendedRequestId     = "$context.extendedRequestId"
+    httpMethod            = "$context.httpMethod"
+    path                  = "$context.path"
+    status                = "$context.status"
+    responseLatency       = "$context.responseLatency"
+    integrationLatency    = "$context.integrationLatency"
+    "error.message"       = "$context.error.message"
+    "service.environment" = local.service_environment
+  })
 
   root_path_override_template = <<-VTL
     #set($context.requestOverride.path = "/")

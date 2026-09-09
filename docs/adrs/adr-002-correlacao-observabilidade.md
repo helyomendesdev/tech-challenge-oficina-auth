@@ -14,9 +14,16 @@ O API Gateway encaminha headers de observabilidade sem modificar seus valores. A
 
 A comparação de UUID pode ser case-insensitive para validação, mas o retorno preserva o texto válido recebido.
 
-`X-Request-Id` identifica uma requisição específica. `traceparent` e `tracestate` são propagados quando recebidos. `tracestate` nunca é fabricado.
+`X-Request-Id` identifica uma requisição específica. O `requestId` retornado
+no envelope de erro e o header de resposta usam, nesta ordem, o
+`X-Request-Id` recebido, `context.aws_request_id` ou um UUID novo. Isso não
+substitui a correlação. `traceparent` e `tracestate` são propagados quando
+recebidos. `tracestate` nunca é fabricado.
 
-Logs estruturados devem conter `correlation.id`. Logs não devem conter CPF, `Authorization`, tokens, senhas, chaves ou segredos.
+Logs estruturados devem conter `timestamp`, `message`, `http.method`,
+`http.route`, `http.status_code`, `service.environment`, `correlation.id`,
+`request_id`, `duration_ms`, `outcome` e `auth.motivo`. Logs não devem conter
+CPF, `Authorization`, tokens, senhas, chaves ou segredos.
 
 ## Consequências
 

@@ -8,6 +8,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from oficina_auth import __version__
@@ -34,6 +35,10 @@ INVALID_INPUT_MESSAGE = "Payload ou CPF invalido."
 INVALID_CREDENTIALS_MESSAGE = "Credenciais invalidas ou cliente nao elegivel."
 DEPENDENCY_UNAVAILABLE_MESSAGE = "Dependencia temporariamente indisponivel."
 INTERNAL_ERROR_MESSAGE = "Erro interno."
+INVALID_REQUEST_TYPE = "invalid_request"
+INVALID_CREDENTIALS_TYPE = "invalid_credentials"
+DEPENDENCY_UNAVAILABLE_TYPE = "dependency_unavailable"
+INTERNAL_ERROR_TYPE = "internal_error"
 TRACEPARENT_PATTERN = re.compile(
     r"^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
     re.IGNORECASE,
@@ -142,18 +147,19 @@ def _handle_event(
     trace_headers = _trace_headers(headers)
     status_code = 500
     outcome = "error"
-    response_body = {"message": INTERNAL_ERROR_MESSAGE}
+    auth_reason = "inesperado"
+    response_body = _error_body(INTERNAL_ERROR_TYPE, INTERNAL_ERROR_MESSAGE, request_id)
 
     try:
         if event.get("httpMethod") != "POST":
-            raise InvalidInput(INVALID_INPUT_MESSAGE)
+            raise InvalidInput(INVALID_INPUT_MESSAGE, reason="payload_invalido")
 
         if not _is_json_content_type(headers.get("content-type")):
-            raise InvalidInput(INVALID_INPUT_MESSAGE)
+            raise InvalidInput(INVALID_INPUT_MESSAGE, reason="payload_invalido")
 
         payload = _parse_payload(event)
         if set(payload) != {"cpf"} or not isinstance(payload["cpf"], str):
-            raise InvalidInput(INVALID_INPUT_MESSAGE)
+            raise InvalidInput(INVALID_INPUT_MESSAGE, reason="payload_invalido")
 
         if authenticator is None:
             raise DependencyUnavailable(DEPENDENCY_UNAVAILABLE_MESSAGE)
@@ -161,27 +167,44 @@ def _handle_event(
         result = authenticator.execute(payload["cpf"])
         status_code = 200
         outcome = "success"
+        auth_reason = "autenticado"
         response_body = {
             "access_token": result.access_token,
             "token_type": result.token_type,
             "expires_in": result.expires_in,
         }
-    except InvalidInput:
-        status_code = 400
-        outcome = "invalid_input"
-        response_body = {"message": INVALID_INPUT_MESSAGE}
-    except InvalidCredentials:
+    except InvalidInput as error:
+        if error.reason == "cpf_invalido":
+            status_code = 401
+            outcome = "invalid_credentials"
+            auth_reason = "cpf_invalido"
+            response_body = _error_body(
+                INVALID_CREDENTIALS_TYPE, INVALID_CREDENTIALS_MESSAGE, request_id
+            )
+        else:
+            status_code = 400
+            outcome = "invalid_input"
+            auth_reason = "payload_invalido"
+            response_body = _error_body(INVALID_REQUEST_TYPE, INVALID_INPUT_MESSAGE, request_id)
+    except InvalidCredentials as error:
         status_code = 401
         outcome = "invalid_credentials"
-        response_body = {"message": INVALID_CREDENTIALS_MESSAGE}
+        auth_reason = error.reason
+        response_body = _error_body(
+            INVALID_CREDENTIALS_TYPE, INVALID_CREDENTIALS_MESSAGE, request_id
+        )
     except DependencyUnavailable:
         status_code = 503
         outcome = "dependency_unavailable"
-        response_body = {"message": DEPENDENCY_UNAVAILABLE_MESSAGE}
+        auth_reason = "dependencia_indisponivel"
+        response_body = _error_body(
+            DEPENDENCY_UNAVAILABLE_TYPE, DEPENDENCY_UNAVAILABLE_MESSAGE, request_id
+        )
     except Exception:
         status_code = 500
         outcome = "unexpected_error"
-        response_body = {"message": INTERNAL_ERROR_MESSAGE}
+        auth_reason = "inesperado"
+        response_body = _error_body(INTERNAL_ERROR_TYPE, INTERNAL_ERROR_MESSAGE, request_id)
     finally:
         duration_ms = int((time.perf_counter() - started_at) * 1000)
         _log_event(
@@ -191,6 +214,8 @@ def _handle_event(
             duration_ms=duration_ms,
             status_code=status_code,
             outcome=outcome,
+            auth_reason=auth_reason,
+            event=event,
         )
 
     return {
@@ -299,6 +324,8 @@ def _log_event(
     duration_ms: int,
     status_code: int,
     outcome: str,
+    auth_reason: str,
+    event: Mapping[str, Any],
 ) -> None:
     level = "INFO" if status_code < 500 else "ERROR"
     log_record = {
@@ -306,11 +333,37 @@ def _log_event(
         "service.environment": config.service_environment,
         "service.version": config.service_version,
         "event": "auth.request.completed",
+        "message": "Authentication request completed",
+        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "level": level,
         "correlation.id": correlation_id,
         "request_id": request_id,
         "duration_ms": duration_ms,
-        "status_code": status_code,
+        "http.method": _safe_http_method(event.get("httpMethod")),
+        "http.route": "/auth",
+        "http.status_code": status_code,
         "outcome": outcome,
+        "auth.motivo": auth_reason,
     }
     print(json.dumps(log_record, separators=(",", ":"), sort_keys=True))
+
+
+def _error_body(error_type: str, message: str, request_id: str) -> dict[str, Any]:
+    return {
+        "error": {
+            "type": error_type,
+            "message": message,
+            "requestId": request_id,
+        }
+    }
+
+
+def _safe_http_method(value: Any) -> str:
+    if not isinstance(value, str):
+        return "UNKNOWN"
+    method = value.upper()
+    return (
+        method
+        if method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+        else "UNKNOWN"
+    )

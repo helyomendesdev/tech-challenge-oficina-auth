@@ -115,7 +115,12 @@ Saída `200`:
 }
 ```
 
-Clientes inexistentes e não elegíveis usam a mesma resposta genérica `401`. Todas as respostas retornam `X-Correlation-Id`.
+CPF inválido, clientes inexistentes e clientes inativos usam a mesma resposta
+genérica `401`. Payload/JSON malformado e headers inválidos usam `400`; o
+throttling agregado do API Gateway pode retornar `429`; dependências
+indisponíveis usam `503`. Todas as respostas retornam `X-Correlation-Id`, e o
+envelope de erro também informa o `requestId` de origem sem expor dados de
+autenticação.
 
 ## Execução Local
 
@@ -155,12 +160,14 @@ As dependências declaradas ficam no `pyproject.toml`; as dependências de runti
 - [`docs/adrs/adr-001-identidade-cliente.md`](docs/adrs/adr-001-identidade-cliente.md): identidade mínima do Cliente.
 - [`docs/adrs/adr-002-correlacao-observabilidade.md`](docs/adrs/adr-002-correlacao-observabilidade.md): correlação e propagação de headers.
 - [`docs/adrs/adr-003-credenciais-runtime-e-assinatura-jwt.md`](docs/adrs/adr-003-credenciais-runtime-e-assinatura-jwt.md): credenciais externas e assinatura JWT.
+- [`docs/adrs/adr-004-new-relic-e-access-logs.md`](docs/adrs/adr-004-new-relic-e-access-logs.md): instrumentação New Relic e access logs do API Gateway.
+- [`docs/adrs/adr-005-ref-pseudonimizado.md`](docs/adrs/adr-005-ref-pseudonimizado.md): dependência segura para `cliente.ref`.
 - [`terraform/README.md`](terraform/README.md): Terraform específico do Auth e contratos de integração.
 
 ## Branches e Ambientes
 
-- `develop`: homologação.
-- `main`: produção.
+- `develop`: homologação (`environment = homologacao`, sufixo AWS `hml`).
+- `main`: produção (`environment = producao`, sufixo AWS `prd`).
 - Mudanças entram exclusivamente por Pull Request.
 
 Não trabalhe diretamente em `develop` ou `main`. Não faça push, merge, deploy ou `terraform apply` sem autorização explícita.
@@ -172,3 +179,11 @@ Não trabalhe diretamente em `develop` ou `main`. Não faça push, merge, deploy
 - **Database:** RDS PostgreSQL e sua configuração.
 - **CI/CD:** workflows, proteção de branches e automação autorizada de plan/apply/deploy.
 - **Observabilidade:** New Relic, dashboards, alertas e observabilidade geral.
+
+O Terraform do Auth já parametriza a instrumentação New Relic da Lambda, sem
+criar Secret ou inserir licença no código/configuração. O account ID, layer ARN
+e identificador do Secret são inputs; os valores alinhados são `8430077`, o
+layer Python 3.11/x86_64 informado pelo grupo e `oficina/newrelic-license` como
+nome de exemplo. A role de logs do API Gateway e as permissões da role da
+Lambda são dependências externas. Consulte
+[`terraform/README.md`](terraform/README.md) para o contrato completo.

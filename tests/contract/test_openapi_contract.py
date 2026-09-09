@@ -25,10 +25,11 @@ def test_post_auth_contract_shape() -> None:
     assert operation["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/AuthRequest"
     )
-    assert set(responses) == {"200", "400", "401", "503"}
+    assert set(responses) == {"200", "400", "401", "429", "503"}
 
     for response in responses.values():
         assert "X-Correlation-Id" in response["headers"]
+        assert "X-Request-Id" in response["headers"]
 
 
 def test_success_response_contract_values() -> None:
@@ -43,4 +44,29 @@ def test_unauthorized_response_uses_generic_message() -> None:
     response = load_contract()["paths"]["/auth"]["post"]["responses"]["401"]
     example = response["content"]["application/json"]["examples"]["genericUnauthorized"]["value"]
 
-    assert example == {"message": "Credenciais invalidas ou cliente nao elegivel."}
+    assert example["error"] == {
+        "type": "invalid_credentials",
+        "message": "Credenciais invalidas ou cliente nao elegivel.",
+        "requestId": "synthetic-request-401",
+    }
+
+
+def test_error_schema_uses_stable_envelope() -> None:
+    error = load_contract()["components"]["schemas"]["ErrorResponse"]
+
+    assert error["required"] == ["error"]
+    assert error["properties"]["error"]["required"] == ["type", "message", "requestId"]
+
+
+def test_invalid_cpf_is_documented_as_generic_unauthorized() -> None:
+    description = load_contract()["paths"]["/auth"]["post"]["description"]
+
+    assert "invalid CPF" in description
+    assert "generic 401" in description
+
+
+def test_malformed_request_and_throttle_have_distinct_status_contracts() -> None:
+    responses = load_contract()["paths"]["/auth"]["post"]["responses"]
+
+    assert responses["400"]["description"].startswith("Request payload")
+    assert responses["429"]["description"].startswith("Aggregate API Gateway")

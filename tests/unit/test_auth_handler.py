@@ -146,23 +146,33 @@ def test_valid_cpf_and_eligible_client_returns_success(capsys: pytest.CaptureFix
     log = parse_log(capsys)
     assert log["correlation.id"] == VALID_CORRELATION_ID
     assert log["request_id"] == "request-001"
-    assert log["status_code"] == 200
+    assert log["http.status_code"] == 200
+    assert log["auth.motivo"] == "autenticado"
+    assert log["http.method"] == "POST"
+    assert log["http.route"] == "/auth"
+    assert log["message"] == "Authentication request completed"
+    assert "timestamp" in log
     assert log["outcome"] == "success"
 
 
-def test_invalid_cpf_returns_400(capsys: pytest.CaptureFixture[str]) -> None:
+def test_invalid_cpf_returns_generic_401(capsys: pytest.CaptureFixture[str]) -> None:
     response = auth_handler()(api_event({"cpf": "11111111111"}), Context())
 
-    assert_json_response(response, 400)
-    assert parse_body(response) == {"message": "Payload ou CPF invalido."}
-    assert parse_log(capsys)["outcome"] == "invalid_input"
+    assert_json_response(response, 401)
+    error = parse_body(response)["error"]
+    assert error["type"] == "invalid_credentials"
+    assert error["message"] == "Credenciais invalidas ou cliente nao elegivel."
+    assert error["requestId"] == "aws-request-001"
+    log = parse_log(capsys)
+    assert log["outcome"] == "invalid_credentials"
+    assert log["auth.motivo"] == "cpf_invalido"
 
 
 def test_missing_client_and_not_eligible_client_return_identical_public_response(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     missing_response = auth_handler()(api_event({"cpf": VALID_CPF}), Context())
-    capsys.readouterr()
+    missing_log = parse_log(capsys)
     not_eligible_response = auth_handler(
         {VALID_CPF: AuthenticationRecord(cliente_id="cliente-001", can_authenticate=False)}
     )(api_event({"cpf": VALID_CPF}), Context())
@@ -171,16 +181,47 @@ def test_missing_client_and_not_eligible_client_return_identical_public_response
     assert not_eligible_response["statusCode"] == 401
     assert parse_body(missing_response) == parse_body(not_eligible_response)
     assert parse_body(missing_response) == {
-        "message": "Credenciais invalidas ou cliente nao elegivel."
+        "error": {
+            "type": "invalid_credentials",
+            "message": "Credenciais invalidas ou cliente nao elegivel.",
+            "requestId": "aws-request-001",
+        }
     }
+    assert missing_log["auth.motivo"] == "nao_encontrado"
+    assert parse_log(capsys)["auth.motivo"] == "inativo"
+
+
+def test_invalid_cpf_has_same_public_authentication_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    invalid_response = auth_handler()(api_event({"cpf": "11111111111"}), Context())
+    invalid_log = parse_log(capsys)
+    missing_response = auth_handler()(api_event({"cpf": VALID_CPF}), Context())
+    missing_log = parse_log(capsys)
+
+    invalid_error = parse_body(invalid_response)["error"]
+    missing_error = parse_body(missing_response)["error"]
+    assert invalid_response["statusCode"] == missing_response["statusCode"] == 401
+    assert invalid_error["type"] == missing_error["type"] == "invalid_credentials"
+    assert invalid_error["message"] == missing_error["message"]
+    assert invalid_log["auth.motivo"] == "cpf_invalido"
+    assert missing_log["auth.motivo"] == "nao_encontrado"
 
 
 def test_invalid_json_returns_400(capsys: pytest.CaptureFixture[str]) -> None:
     response = auth_handler()(api_event("{invalid-json"), Context())
 
     assert_json_response(response, 400)
-    assert parse_body(response) == {"message": "Payload ou CPF invalido."}
-    assert parse_log(capsys)["status_code"] == 400
+    assert parse_body(response) == {
+        "error": {
+            "type": "invalid_request",
+            "message": "Payload ou CPF invalido.",
+            "requestId": "aws-request-001",
+        }
+    }
+    log = parse_log(capsys)
+    assert log["http.status_code"] == 400
+    assert log["auth.motivo"] == "payload_invalido"
 
 
 def test_base64_body_is_decoded(capsys: pytest.CaptureFixture[str]) -> None:
@@ -302,7 +343,13 @@ def test_dependency_unavailable_returns_503(capsys: pytest.CaptureFixture[str]) 
     response = handler(api_event({"cpf": VALID_CPF}), Context())
 
     assert_json_response(response, 503)
-    assert parse_body(response) == {"message": "Dependencia temporariamente indisponivel."}
+    assert parse_body(response) == {
+        "error": {
+            "type": "dependency_unavailable",
+            "message": "Dependencia temporariamente indisponivel.",
+            "requestId": "aws-request-001",
+        }
+    }
     assert parse_log(capsys)["outcome"] == "dependency_unavailable"
 
 
@@ -317,7 +364,13 @@ def test_unexpected_exception_returns_500_without_stack_trace(
     response = handler(api_event({"cpf": VALID_CPF}), Context())
 
     assert_json_response(response, 500)
-    assert parse_body(response) == {"message": "Erro interno."}
+    assert parse_body(response) == {
+        "error": {
+            "type": "internal_error",
+            "message": "Erro interno.",
+            "requestId": "aws-request-001",
+        }
+    }
     assert "Traceback" not in response["body"]
     assert parse_log(capsys)["outcome"] == "unexpected_error"
 
@@ -326,7 +379,13 @@ def test_body_payload_must_contain_only_cpf(capsys: pytest.CaptureFixture[str]) 
     response = auth_handler()(api_event({"cpf": VALID_CPF, "unexpected": "field"}), Context())
 
     assert_json_response(response, 400)
-    assert parse_body(response) == {"message": "Payload ou CPF invalido."}
+    assert parse_body(response) == {
+        "error": {
+            "type": "invalid_request",
+            "message": "Payload ou CPF invalido.",
+            "requestId": "aws-request-001",
+        }
+    }
     parse_log(capsys)
 
 
@@ -334,7 +393,13 @@ def test_missing_body_returns_400(capsys: pytest.CaptureFixture[str]) -> None:
     response = auth_handler()(api_event(), Context())
 
     assert_json_response(response, 400)
-    assert parse_body(response) == {"message": "Payload ou CPF invalido."}
+    assert parse_body(response) == {
+        "error": {
+            "type": "invalid_request",
+            "message": "Payload ou CPF invalido.",
+            "requestId": "aws-request-001",
+        }
+    }
     parse_log(capsys)
 
 
@@ -344,7 +409,13 @@ def test_non_json_content_type_returns_400(capsys: pytest.CaptureFixture[str]) -
     )
 
     assert_json_response(response, 400)
-    assert parse_body(response) == {"message": "Payload ou CPF invalido."}
+    assert parse_body(response) == {
+        "error": {
+            "type": "invalid_request",
+            "message": "Payload ou CPF invalido.",
+            "requestId": "aws-request-001",
+        }
+    }
     parse_log(capsys)
 
 
@@ -352,7 +423,13 @@ def test_non_post_method_returns_400(capsys: pytest.CaptureFixture[str]) -> None
     response = auth_handler()(api_event({"cpf": VALID_CPF}, method="GET"), Context())
 
     assert_json_response(response, 400)
-    assert parse_body(response) == {"message": "Payload ou CPF invalido."}
+    assert parse_body(response) == {
+        "error": {
+            "type": "invalid_request",
+            "message": "Payload ou CPF invalido.",
+            "requestId": "aws-request-001",
+        }
+    }
     parse_log(capsys)
 
 
@@ -366,7 +443,13 @@ def test_default_lambda_handler_does_not_use_in_memory_in_production(
     response = lambda_handler(api_event({"cpf": VALID_CPF}), Context())
 
     assert_json_response(response, 503)
-    assert parse_body(response) == {"message": "Dependencia temporariamente indisponivel."}
+    assert parse_body(response) == {
+        "error": {
+            "type": "dependency_unavailable",
+            "message": "Dependencia temporariamente indisponivel.",
+            "requestId": "aws-request-001",
+        }
+    }
     assert parse_log(capsys)["service.environment"] == "production"
 
 

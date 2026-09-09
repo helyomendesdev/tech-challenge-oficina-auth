@@ -99,9 +99,9 @@ def main() -> int:
             expect_generated_correlation=True,
         ),
         DemoScenario(
-            name="400 invalid CPF",
+            name="401 invalid CPF",
             fixture="invalid_cpf.json",
-            expected_status=400,
+            expected_status=401,
             handler_factory=lambda: success_handler,
         ),
         DemoScenario(
@@ -185,8 +185,16 @@ def _run_scenario(scenario: DemoScenario) -> dict[str, Any]:
     for log_record in log_lines:
         if log_record.get("correlation.id") != correlation_id:
             failures.append(f"{scenario.name}: log correlation mismatch")
-        if log_record.get("status_code") != scenario.expected_status:
+        if log_record.get("http.status_code") != scenario.expected_status:
             failures.append(f"{scenario.name}: log status mismatch")
+
+    if scenario.expected_status == 200:
+        if sanitized_body.get("token_type") != "Bearer" or sanitized_body.get("expires_in") != 900:
+            failures.append(f"{scenario.name}: invalid success contract")
+    else:
+        error = sanitized_body.get("error")
+        if not isinstance(error, dict) or error.get("requestId") != headers.get("X-Request-Id"):
+            failures.append(f"{scenario.name}: invalid error envelope")
 
     return {
         "lines": [

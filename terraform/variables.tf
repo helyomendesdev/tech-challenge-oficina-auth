@@ -3,18 +3,18 @@ variable "aws_region" {
   type        = string
 
   validation {
-    condition     = trimspace(var.aws_region) != ""
-    error_message = "aws_region must not be empty."
+    condition     = var.aws_region == "us-east-1"
+    error_message = "aws_region must be us-east-1 for the Auth deployment."
   }
 }
 
 variable "environment" {
-  description = "Deployment environment used in names and tags."
+  description = "Canonical service environment; the AWS tag suffix is derived as hml or prd."
   type        = string
 
   validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "environment must be one of dev, staging, or prod."
+    condition     = contains(["homologacao", "producao"], var.environment)
+    error_message = "environment must be homologacao or producao."
   }
 }
 
@@ -148,6 +148,36 @@ variable "jwt_private_key_secret_id" {
   }
 }
 
+variable "new_relic_account_id" {
+  description = "New Relic account ID; supplied by deployment configuration."
+  type        = number
+
+  validation {
+    condition     = var.new_relic_account_id > 0
+    error_message = "new_relic_account_id must be positive."
+  }
+}
+
+variable "new_relic_layer_arn" {
+  description = "Existing New Relic Python 3.11 Lambda layer ARN for x86_64."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:[^:]+:lambda:[^:]+:[0-9]{12}:layer:[^:]+:[0-9]+$", var.new_relic_layer_arn))
+    error_message = "new_relic_layer_arn must be a Lambda layer version ARN."
+  }
+}
+
+variable "new_relic_license_key_secret_id" {
+  description = "Name or ARN of the existing New Relic license Secret; content is read by the runtime layer."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9/_+=.@:-]{1,512}$", var.new_relic_license_key_secret_id))
+    error_message = "new_relic_license_key_secret_id must be a Secret name or ARN, not Secret content."
+  }
+}
+
 variable "postgres_db" {
   description = "Authentication database name."
   type        = string
@@ -218,15 +248,15 @@ variable "lambda_architecture" {
   default     = "x86_64"
 
   validation {
-    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
-    error_message = "lambda_architecture must be x86_64 or arm64."
+    condition     = var.lambda_architecture == "x86_64"
+    error_message = "lambda_architecture must be x86_64 for the validated Lambda artifact."
   }
 }
 
 variable "stage_name" {
   description = "API Gateway REST stage name."
   type        = string
-  default     = "dev"
+  default     = "hml"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9_-]{1,128}$", var.stage_name))
@@ -234,14 +264,36 @@ variable "stage_name" {
   }
 }
 
-variable "api_gateway_access_log_group_arn" {
-  description = "Optional existing CloudWatch Log Group ARN; account-level API Gateway logging role is external."
-  type        = string
-  default     = null
+variable "auth_throttle_rate_limit" {
+  description = "Aggregate API Gateway steady-state request rate for POST /auth; not a per-IP limit."
+  type        = number
+  default     = 10
 
   validation {
-    condition     = var.api_gateway_access_log_group_arn == null || can(regex("^arn:[^:]+:logs:[^:]+:[0-9]{12}:log-group:.+$", var.api_gateway_access_log_group_arn))
-    error_message = "api_gateway_access_log_group_arn must be an existing CloudWatch Log Group ARN when provided."
+    condition     = var.auth_throttle_rate_limit > 0
+    error_message = "auth_throttle_rate_limit must be positive."
+  }
+}
+
+variable "auth_throttle_burst_limit" {
+  description = "Aggregate API Gateway burst limit for POST /auth; not a per-IP limit."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.auth_throttle_burst_limit >= 1 && floor(var.auth_throttle_burst_limit) == var.auth_throttle_burst_limit
+    error_message = "auth_throttle_burst_limit must be a positive integer."
+  }
+}
+
+variable "api_gateway_access_log_retention_days" {
+  description = "CloudWatch retention for the API Gateway access log group."
+  type        = number
+  default     = 14
+
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.api_gateway_access_log_retention_days)
+    error_message = "api_gateway_access_log_retention_days must be a supported CloudWatch retention value."
   }
 }
 

@@ -57,3 +57,8 @@ output "lambda_log_group_name" {
   description = "CloudWatch Log Group created for the Auth Lambda."
   value       = aws_cloudwatch_log_group.lambda.name
 }
+
+output "api_gateway_access_log_group_name" {
+  description = "CloudWatch Log Group created for API Gateway access logs."
+  value       = aws_cloudwatch_log_group.api_gateway_access.name
+}

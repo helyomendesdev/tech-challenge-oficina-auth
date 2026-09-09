@@ -136,19 +136,19 @@ resource "aws_api_gateway_stage" "auth" {
   stage_name    = var.stage_name
   tags          = local.tags
 
-  dynamic "access_log_settings" {
-    for_each = var.api_gateway_access_log_group_arn == null ? [] : [var.api_gateway_access_log_group_arn]
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_gateway_access.arn
+    format          = local.api_gateway_access_log_format
+  }
+}
 
-    content {
-      destination_arn = access_log_settings.value
-      format = jsonencode({
-        requestId         = "$context.requestId"
-        extendedRequestId = "$context.extendedRequestId"
-        httpMethod        = "$context.httpMethod"
-        path              = "$context.path"
-        status            = "$context.status"
-        responseLatency   = "$context.responseLatency"
-      })
-    }
+resource "aws_api_gateway_method_settings" "auth_post" {
+  rest_api_id = aws_api_gateway_rest_api.auth.id
+  stage_name  = aws_api_gateway_stage.auth.stage_name
+  method_path = "auth/POST"
+
+  settings {
+    throttling_rate_limit  = var.auth_throttle_rate_limit
+    throttling_burst_limit = var.auth_throttle_burst_limit
   }
 }
