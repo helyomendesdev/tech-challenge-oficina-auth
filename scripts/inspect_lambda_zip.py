@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -20,7 +21,7 @@ FORBIDDEN_PARTS = {
     "tests",
 }
 FORBIDDEN_SUFFIXES = {".pem", ".key", ".crt", ".env", ".pyc", ".pyo", ".pyd"}
-FORBIDDEN_NAME_SUFFIXES = (".dist-info", ".data")
+FORBIDDEN_NAME_SUFFIXES = (".data",)
 ALLOWED_PUBLIC_CA_BUNDLE = "botocore/cacert.pem"
 REQUIRED_ENTRIES = {
     "boto3/__init__.py",
@@ -28,6 +29,10 @@ REQUIRED_ENTRIES = {
     "oficina_auth/application/authenticate_client.py",
     "oficina_auth/infrastructure/jwt_tokens.py",
     "pg8000/__init__.py",
+}
+# scramp reads its own version from package metadata at import time.
+REQUIRED_ENTRY_PATTERNS = {
+    "scramp dist-info": re.compile(r"^scramp-[^/]+\.dist-info/METADATA$"),
 }
 
 
@@ -56,6 +61,9 @@ def inspect_zip(artifact: Path) -> list[str]:
     missing = sorted(REQUIRED_ENTRIES.difference(entries))
     if missing:
         failures.append(f"missing required entries: {', '.join(missing)}")
+    for label, pattern in sorted(REQUIRED_ENTRY_PATTERNS.items()):
+        if not any(pattern.match(entry) for entry in entries):
+            failures.append(f"missing required entry: {label}")
 
     for entry in entries:
         parts = set(Path(entry).parts)

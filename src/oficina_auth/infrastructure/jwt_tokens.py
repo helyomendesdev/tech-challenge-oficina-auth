@@ -52,7 +52,7 @@ class PublicKeyProvider(Protocol):
 
 @dataclass(frozen=True)
 class TokenClaims:
-    cliente_id: str
+    cliente_id: int
     subject: str
     issued_at: int
     expires_at: int
@@ -70,6 +70,7 @@ class Rs256TokenIssuer(TokenIssuer):
 
     def issue(self, cliente_id: str) -> str:
         private_key = _load_private_key(self._private_key_provider.get_private_key)
+        numeric_cliente_id = _as_cliente_id(cliente_id)
         now = self._clock.now().astimezone(UTC)
         issued_at = int(now.timestamp())
         expires_at = int((now + timedelta(seconds=TOKEN_EXPIRATION_SECONDS)).timestamp())
@@ -77,8 +78,8 @@ class Rs256TokenIssuer(TokenIssuer):
         claims = {
             "iss": ISSUER,
             "aud": AUDIENCE,
-            "sub": f"cliente:{cliente_id}",
-            "cliente_id": cliente_id,
+            "sub": f"cliente:{numeric_cliente_id}",
+            "cliente_id": numeric_cliente_id,
             "principal_type": "cliente",
             "token_type": "access",
             "iat": issued_at,
@@ -129,7 +130,7 @@ class TokenVerifier:
         return self._validate_claims(claims)
 
     def _validate_claims(self, claims: dict[str, Any]) -> TokenClaims:
-        cliente_id = _require_non_empty_string(claims, "cliente_id")
+        cliente_id = _require_int(claims, "cliente_id")
         subject = _require_non_empty_string(claims, "sub")
         principal_type = _require_non_empty_string(claims, "principal_type")
         token_type = _require_non_empty_string(claims, "token_type")
@@ -212,6 +213,17 @@ def _require_non_empty_string(claims: dict[str, Any], claim_name: str) -> str:
 
 def _require_int(claims: dict[str, Any], claim_name: str) -> int:
     value = claims.get(claim_name)
-    if not isinstance(value, int):
+    if not isinstance(value, int) or isinstance(value, bool):
         raise InvalidCredentials("Token invalido.")
+    return value
+
+
+def _as_cliente_id(cliente_id: str) -> int:
+    # The consumer (Django) requires an integer claim; the database id is an integer.
+    try:
+        value = int(cliente_id)
+    except (TypeError, ValueError):
+        raise DependencyUnavailable("Identidade do cliente invalida.") from None
+    if value <= 0:
+        raise DependencyUnavailable("Identidade do cliente invalida.")
     return value

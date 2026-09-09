@@ -14,7 +14,7 @@ Cliente
 
 O Auth cria a Lambda, API Gateway, recursos `/auth` e `/{proxy+}`, VPC Link V2, Security Groups próprios, regras direcionadas aos Security Groups externos e Log Group da Lambda. O `POST /auth` usa integração `AWS_PROXY` direta. A raiz e o proxy usam `HTTP_PROXY` privado com `integration_target = alb_arn`.
 
-O nome do stage é removido do path por templates de override do API Gateway. O proxy preserva o path original, query string, body e headers. `Authorization`, `X-Correlation-Id`, `X-Request-Id`, `traceparent` e `tracestate` não são remapeados nem fabricados pelo gateway. A rota explícita `/auth` tem precedência sobre `/{proxy+}`.
+As integrações `HTTP_PROXY` não usam `request_templates`: o API Gateway os ignora nesse tipo e rejeita a chave de content type curinga. A raiz aponta para `<alb>/` e o proxy para `<alb>/{proxy}/`, com `{proxy}` mapeado por `request_parameters` (`integration.request.path.proxy`); a barra final é obrigatória porque as rotas Django terminam em `/` e o valor de `{proxy}` chega sem ela. O stage não faz parte do path encaminhado. O proxy preserva query string, body e headers. `Authorization`, `X-Correlation-Id`, `X-Request-Id`, `traceparent` e `tracestate` não são remapeados nem fabricados pelo gateway. A rota explícita `/auth` tem precedência sobre `/{proxy+}`.
 
 O ALB é interno, HTTP na porta `8000`, com Target Group/NodePort `30080` e health-check `/health/ready/`; esses recursos continuam pertencendo ao K8s e não são alterados aqui. A integração usa `alb_arn`; `alb_listener_arn` não é usado.
 
@@ -27,7 +27,7 @@ O ALB é interno, HTTP na porta `8000`, com Target Group/NodePort `30080` e heal
 - A chave privada JWT fica em Secret separado. O código aplica `iss=oficina-auth`, `aud=oficina-api` e expiração de 900 segundos.
 - A saída para Secrets Manager/New Relic depende do NAT das subnets privadas. Este módulo não cria NAT Gateway ou VPC Endpoint.
 
-As regras da Lambda para o SG do RDS e do VPC Link para o SG do ALB são independentes e restritas às portas configuradas. Nenhuma regra abre PostgreSQL ou ALB para `0.0.0.0/0`.
+As regras da Lambda para o SG do RDS e do VPC Link para o SG do ALB são independentes e restritas às portas configuradas. Nenhuma regra abre PostgreSQL ou ALB para `0.0.0.0/0`. Os Security Groups do Auth não declaram `ingress`/`egress` inline: as regras vivem em recursos `aws_vpc_security_group_*_rule`, e blocos inline vazios as apagariam a cada `apply`.
 
 ## Build e configuração
 

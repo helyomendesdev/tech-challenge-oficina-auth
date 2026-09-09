@@ -46,6 +46,6 @@ Saída esperada, sem dados sensíveis:
 rds_smoke=passed connectivity=ok client_lookup=ok write_permissions=denied
 ```
 
-O teste consulta somente `id` e `ativo` por CPF normalizado/formatado, e tenta `INSERT`, `UPDATE` e `DELETE` em transações revertidas. Cada operação deve falhar por falta de privilégio (`42501`). Nenhuma alteração persistida é permitida.
+O teste conecta com TLS, consulta somente `id` e `ativo` pela coluna `documento` (CPF normalizado ou formatado), e tenta `INSERT`, `UPDATE` e `DELETE` em transações revertidas. Cada operação deve falhar por falta de privilégio (`42501`). Nenhuma alteração persistida é permitida.
 
 Qualquer falha encerra com código diferente de zero e mensagem genérica. A ausência da confirmação encerra sem acessar AWS ou RDS.
