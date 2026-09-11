@@ -1,0 +1,111 @@
+{
+  "info": {
+    "name": "Tech Challenge Oficina - Auth",
+    "description": "Exemplos do contrato POST /auth (Tech Challenge Oficina, Fase 3) e uso do token emitido em uma rota protegida da aplicacao principal. Ajuste a variavel base_url para o endpoint real da API Gateway (stage homologacao ou producao).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://<api-id>.execute-api.us-east-1.amazonaws.com/homologacao",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "POST /auth - 200 CPF valido e cadastrado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('token', body.access_token);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cpf\": \"52998224725\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth",
+          "host": ["{{base_url}}"],
+          "path": ["auth"]
+        },
+        "description": "CPF valido, cadastrado e elegivel. Resposta 200 com access_token, token_type e expires_in. O script de teste salva o token na variavel de colecao {{token}} para a requisicao protegida abaixo."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /auth - 400 CPF invalido",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cpf\": \"111.111.111-11\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth",
+          "host": ["{{base_url}}"],
+          "path": ["auth"]
+        },
+        "description": "CPF com digitos verificadores invalidos (todos os digitos repetidos). Resposta 400: {\"message\": \"Payload ou CPF invalido.\"}"
+      },
+      "response": []
+    },
+    {
+      "name": "POST /auth - 401 CPF nao cadastrado",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cpf\": \"39053344705\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth",
+          "host": ["{{base_url}}"],
+          "path": ["auth"]
+        },
+        "description": "CPF valido, sem registro em atendimento_cliente. Resposta 401: {\"message\": \"Credenciais invalidas ou cliente nao elegivel.\"} (mesma mensagem generica para cliente inexistente ou inelegivel)."
+      },
+      "response": []
+    },
+    {
+      "name": "GET /api/v1/veiculos/ - rota protegida com token de cliente",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/veiculos/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "veiculos", ""]
+        },
+        "description": "Usa o access_token emitido por POST /auth (variavel {{token}}) para listar os veiculos do proprio cliente na aplicacao principal (tech-challenge-oficina). Resposta 200 paginada, com id/placa/marca/modelo/ano."
+      },
+      "response": []
+    }
+  ]
+}
