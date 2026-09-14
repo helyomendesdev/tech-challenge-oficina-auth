@@ -75,7 +75,7 @@ def main() -> int:
     started_at = time.perf_counter()
     token_issuer = Rs256TokenIssuer(EphemeralPrivateKeyProvider(_generate_private_key()))
     success_handler = create_local_demo_handler(
-        {SUCCESS_CPF: AuthenticationRecord(cliente_id="cliente-demo", can_authenticate=True)},
+        {SUCCESS_CPF: AuthenticationRecord(cliente_id="1001", can_authenticate=True)},
         token_issuer,
         HandlerConfig(service_environment="local-demo"),
     )

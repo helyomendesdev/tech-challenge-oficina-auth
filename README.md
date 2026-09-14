@@ -50,7 +50,7 @@ O núcleo atual é independente de AWS e frameworks web. Ele contém:
 - Ports `ClientRepository` e `TokenIssuer`.
 - Caso de uso `AuthenticateClient`.
 - Adapter `InMemoryClientRepository`, somente para testes e desenvolvimento local.
-- Adapter `PostgresClientRepository`, para a tabela Django `atendimento_cliente`, lendo apenas `id` e `ativo`.
+- Adapter `PostgresClientRepository`, para a tabela Django `atendimento_cliente`, consultando pela coluna `documento` (CPF com ou sem pontuação) e lendo apenas `id` e `ativo`, sempre com TLS.
 - Providers de credenciais e chave privada via Secrets Manager, com cache temporário no processo aquecido.
 - Emissor `Rs256TokenIssuer` e verificador `TokenVerifier`, com chaves fornecidas por providers.
 - Handler `POST /auth` para API Gateway REST API com Lambda proxy integration.
@@ -63,18 +63,18 @@ O handler em `oficina_auth.handlers.auth.lambda_handler` trata eventos REST API 
 
 Para testes e demonstração local, use `create_local_demo_handler(...)` com dependências explícitas. A `lambda_handler` de produção exige `DB_HOST`, `DB_PORT`, `POSTGRES_DB=oficina`, `DB_SECRET_ID` e `JWT_PRIVATE_KEY_SECRET_ID`, e compõe PostgreSQL, Secrets Manager e JWT. Produção não usa `InMemoryClientRepository` por fallback silencioso.
 
-O PostgreSQL usa `pg8000`, um driver DB-API puro Python adequado ao empacotamento da Lambda, sem dependência de wheel nativo do sistema operacional. O build instala as dependências de runtime para Python 3.11 e o inspetor exige `pg8000` e `boto3` no ZIP.
+O PostgreSQL usa `pg8000`, um driver DB-API puro Python adequado ao empacotamento da Lambda, sem dependência de wheel nativo do sistema operacional. O build instala as dependências de runtime para Python 3.11 e o inspetor exige `pg8000` e `boto3` no ZIP. A conexão usa `ssl_context=True`, porque o RDS PostgreSQL aplica `rds.force_ssl=1`. Os diretórios `.dist-info` permanecem no ZIP: `scramp`, dependência do `pg8000`, lê a própria versão via `importlib.metadata` no import e a Lambda falharia sem esses metadados.
 
 ## JWT de Cliente
 
-A primeira versão emite somente access tokens RS256, sem refresh token no fluxo por CPF. O emissor usa `iss=oficina-auth`, `aud=oficina-api`, expiração de 900 segundos e `sub=cliente:<id>`.
+A primeira versão emite somente access tokens RS256, sem refresh token no fluxo por CPF. O emissor usa `iss=oficina-auth`, `aud=oficina-api`, expiração de 900 segundos, `sub=cliente:<id>` e `cliente_id` inteiro.
 
 Claims obrigatórias:
 
 - `iss`
 - `aud`
 - `sub`
-- `cliente_id`
+- `cliente_id` (inteiro, o `id` do cliente; o consumidor Django rejeita outro tipo)
 - `principal_type=cliente`
 - `token_type=access`
 - `iat`
@@ -142,7 +142,7 @@ terraform -chdir=terraform validate
 
 Use `python scripts/invoke_local.py` para executar uma demonstração independente da AWS com eventos sintéticos de API Gateway REST. A saída redige tokens como `<redacted>` e não imprime CPF completo.
 
-Use `python scripts/build_lambda.py` para gerar `build/lambda/oficina_auth_lambda.zip` e seu checksum SHA-256. O diretório `build/` é ignorado pelo Git. Depois execute `python scripts/inspect_lambda_zip.py build/lambda/oficina_auth_lambda.zip` para bloquear testes, caches, `.env`, Git, chaves e arquivos locais no pacote, além de confirmar os módulos `pg8000` e `boto3`.
+Use `python scripts/build_lambda.py` para gerar `build/lambda/oficina_auth_lambda.zip` e seu checksum SHA-256. O diretório `build/` é ignorado pelo Git. Depois execute `python scripts/inspect_lambda_zip.py build/lambda/oficina_auth_lambda.zip` para bloquear testes, caches, `.env`, Git, chaves e arquivos locais no pacote, além de confirmar os módulos `pg8000` e `boto3` e os metadados `scramp-*.dist-info`.
 
 As dependências declaradas ficam no `pyproject.toml`; as dependências de runtime resolvidas, incluindo transitivas, ficam fixadas em [`requirements.lock`](requirements.lock). O build instala exclusivamente esse lock com hashes, sem usar a `.venv` como fonte do ZIP, e falha se os marcadores de dependência direta estiverem desatualizados. Não edite o lock manualmente: para atualizá-lo, resolva novamente as versões para `manylinux2014_x86_64`, Python 3.11 e ABI `cp311` com `pip download --only-binary=:all: --platform manylinux2014_x86_64 --implementation cp --python-version 3.11 --abi cp311`, registre os hashes com `python -m pip hash` e valide com o build e o inspetor. Dependências de desenvolvimento nunca entram no ZIP.
 

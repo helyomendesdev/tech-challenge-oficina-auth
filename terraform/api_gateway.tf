@@ -62,12 +62,8 @@ resource "aws_api_gateway_integration" "root_private" {
   connection_type         = "VPC_LINK"
   connection_id           = aws_apigatewayv2_vpc_link.auth.id
   integration_target      = var.alb_arn
-  uri                     = local.alb_uri
+  uri                     = "${local.alb_uri}/"
   passthrough_behavior    = "WHEN_NO_MATCH"
-
-  request_templates = {
-    "*/*" = local.root_path_override_template
-  }
 }
 
 resource "aws_api_gateway_method" "proxy_any" {
@@ -90,11 +86,14 @@ resource "aws_api_gateway_integration" "proxy_private" {
   connection_type         = "VPC_LINK"
   connection_id           = aws_apigatewayv2_vpc_link.auth.id
   integration_target      = var.alb_arn
-  uri                     = local.alb_uri
+  uri                     = "${local.alb_uri}/{proxy}/"
   passthrough_behavior    = "WHEN_NO_MATCH"
 
-  request_templates = {
-    "*/*" = local.proxy_path_override_template
+  # HTTP_PROXY ignores request_templates (and AWS rejects a wildcard content type
+  # as a template key). The path is forwarded by parameter mapping; the trailing
+  # slash is required because Django routes end with "/" and {proxy} arrives without it.
+  request_parameters = {
+    "integration.request.path.proxy" = "method.request.path.proxy"
   }
 }
 
@@ -103,19 +102,20 @@ resource "aws_api_gateway_deployment" "auth" {
 
   triggers = {
     redeployment = sha1(jsonencode({
-      api_id              = aws_api_gateway_rest_api.auth.id
-      auth_method         = aws_api_gateway_method.auth_post.id
-      auth_integration    = aws_api_gateway_integration.auth_lambda.id
-      root_method         = aws_api_gateway_method.root_any.id
-      root_integration    = aws_api_gateway_integration.root_private.id
-      proxy_method        = aws_api_gateway_method.proxy_any.id
-      proxy_integration   = aws_api_gateway_integration.proxy_private.id
-      vpc_link_id         = aws_apigatewayv2_vpc_link.auth.id
-      alb_arn             = var.alb_arn
-      alb_uri             = local.alb_uri
-      root_path_template  = local.root_path_override_template
-      proxy_path_template = local.proxy_path_override_template
-      stage_name          = var.stage_name
+      api_id                = aws_api_gateway_rest_api.auth.id
+      auth_method           = aws_api_gateway_method.auth_post.id
+      auth_integration      = aws_api_gateway_integration.auth_lambda.id
+      root_method           = aws_api_gateway_method.root_any.id
+      root_integration      = aws_api_gateway_integration.root_private.id
+      root_integration_uri  = aws_api_gateway_integration.root_private.uri
+      proxy_method          = aws_api_gateway_method.proxy_any.id
+      proxy_integration     = aws_api_gateway_integration.proxy_private.id
+      proxy_integration_uri = aws_api_gateway_integration.proxy_private.uri
+      proxy_path_parameter  = aws_api_gateway_integration.proxy_private.request_parameters["integration.request.path.proxy"]
+      vpc_link_id           = aws_apigatewayv2_vpc_link.auth.id
+      alb_arn               = var.alb_arn
+      alb_uri               = local.alb_uri
+      stage_name            = var.stage_name
     }))
   }
 
