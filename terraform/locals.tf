@@ -32,15 +32,4 @@ locals {
     DB_SECRET_ID              = var.db_secret_id
     JWT_PRIVATE_KEY_SECRET_ID = var.jwt_private_key_secret_id
   }
-
-  root_path_override_template = <<-VTL
-    #set($context.requestOverride.path = "/")
-    $input.body
-  VTL
-
-  proxy_path_override_template = <<-VTL
-    #set($proxyPath = $input.params('proxy'))
-    #set($context.requestOverride.path = "/$proxyPath")
-    $input.body
-  VTL
 }

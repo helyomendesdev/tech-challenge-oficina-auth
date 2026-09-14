@@ -29,7 +29,9 @@ EXCLUDED_NAMES = {
     "build",
     "dist",
 }
-EXCLUDED_SUFFIXES = (".dist-info", ".data")
+# `.dist-info` stays in the ZIP: scramp (pg8000 dependency) calls
+# importlib.metadata.version() at import time and fails without it.
+EXCLUDED_SUFFIXES = (".data",)
 
 
 def main() -> int:

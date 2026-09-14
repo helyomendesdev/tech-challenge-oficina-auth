@@ -66,13 +66,23 @@ run "valid_auth_topology" {
   }
 
   assert {
-    condition     = aws_api_gateway_integration.proxy_private.uri == "http://internal-synthetic-alb.local:8000"
-    error_message = "The proxy URI must use the supplied ALB protocol, DNS name, and port."
+    condition     = aws_api_gateway_integration.root_private.uri == "http://internal-synthetic-alb.local:8000/"
+    error_message = "The root URI must use the supplied ALB protocol, DNS name, and port, ending in a slash."
   }
 
   assert {
-    condition     = strcontains(aws_api_gateway_integration.proxy_private.request_templates["*/*"], "requestOverride.path")
-    error_message = "The REST private integration must remove the stage from the forwarded path."
+    condition     = aws_api_gateway_integration.proxy_private.uri == "http://internal-synthetic-alb.local:8000/{proxy}/"
+    error_message = "The proxy URI must forward {proxy} to the ALB with the trailing slash Django requires."
+  }
+
+  assert {
+    condition     = aws_api_gateway_integration.proxy_private.request_parameters["integration.request.path.proxy"] == "method.request.path.proxy"
+    error_message = "The proxy path must be mapped by request parameter; HTTP_PROXY ignores request templates."
+  }
+
+  assert {
+    condition     = try(length(aws_api_gateway_integration.root_private.request_templates), 0) == 0 && try(length(aws_api_gateway_integration.proxy_private.request_templates), 0) == 0
+    error_message = "HTTP_PROXY integrations must not declare request templates; AWS rejects wildcard content-type keys."
   }
 
   assert {

@@ -19,7 +19,7 @@ from oficina_auth.infrastructure.jwt_tokens import (
     TokenVerifier,
 )
 
-CLIENTE_ID = "cliente-001"
+CLIENTE_ID = 42
 FIXED_NOW = datetime(2026, 9, 2, 12, 0, tzinfo=UTC)
 
 
@@ -117,7 +117,7 @@ def test_valid_token_is_issued_and_verified(key_pair: KeyPair) -> None:
     issuer = Rs256TokenIssuer(StaticPrivateKeyProvider(key_pair.private_pem), FixedClock())
     verifier = verifier_for(key_pair)
 
-    token = issuer.issue(CLIENTE_ID)
+    token = issuer.issue(str(CLIENTE_ID))
     claims = verifier.verify(token)
     decoded = jwt.decode(
         token,
@@ -130,6 +130,9 @@ def test_valid_token_is_issued_and_verified(key_pair: KeyPair) -> None:
 
     assert claims.cliente_id == CLIENTE_ID
     assert claims.subject == f"cliente:{CLIENTE_ID}"
+    assert decoded["cliente_id"] == CLIENTE_ID
+    assert isinstance(decoded["cliente_id"], int)
+    assert decoded["sub"] == f"cliente:{CLIENTE_ID}"
     assert decoded["principal_type"] == "cliente"
     assert decoded["token_type"] == "access"
     assert decoded["exp"] - decoded["iat"] == TOKEN_EXPIRATION_SECONDS
@@ -141,7 +144,7 @@ def test_token_can_be_issued_and_verified_with_default_clock(key_pair: KeyPair) 
     issuer = Rs256TokenIssuer(StaticPrivateKeyProvider(key_pair.private_pem))
     verifier = TokenVerifier(StaticPublicKeyProvider(key_pair.public_pem))
 
-    claims = verifier.verify(issuer.issue(CLIENTE_ID))
+    claims = verifier.verify(issuer.issue(str(CLIENTE_ID)))
 
     assert claims.cliente_id == CLIENTE_ID
 
@@ -262,11 +265,20 @@ def test_malformed_jti_is_rejected(key_pair: KeyPair) -> None:
         verifier_for(key_pair).verify(token)
 
 
-def test_empty_cliente_id_is_rejected(key_pair: KeyPair) -> None:
-    token = sign_rs256(key_pair, valid_claims(cliente_id="", sub="cliente:"))
+@pytest.mark.parametrize("cliente_id", ["", "42", True, 4.2])
+def test_non_integer_cliente_id_is_rejected(key_pair: KeyPair, cliente_id: Any) -> None:
+    token = sign_rs256(key_pair, valid_claims(cliente_id=cliente_id, sub=f"cliente:{cliente_id}"))
 
     with pytest.raises(InvalidCredentials, match="Token invalido\\."):
         verifier_for(key_pair).verify(token)
+
+
+@pytest.mark.parametrize("cliente_id", ["cliente-001", "", "0", "-1"])
+def test_non_numeric_cliente_id_cannot_be_issued(key_pair: KeyPair, cliente_id: str) -> None:
+    issuer = Rs256TokenIssuer(StaticPrivateKeyProvider(key_pair.private_pem), FixedClock())
+
+    with pytest.raises(DependencyUnavailable, match="Identidade do cliente invalida\\."):
+        issuer.issue(cliente_id)
 
 
 def test_non_integer_iat_is_rejected(key_pair: KeyPair) -> None:
@@ -280,21 +292,21 @@ def test_missing_private_key_fails_safely() -> None:
     issuer = Rs256TokenIssuer(StaticPrivateKeyProvider(""), FixedClock())
 
     with pytest.raises(DependencyUnavailable, match="Chave criptografica indisponivel\\."):
-        issuer.issue(CLIENTE_ID)
+        issuer.issue(str(CLIENTE_ID))
 
 
 def test_private_key_provider_failure_fails_safely() -> None:
     issuer = Rs256TokenIssuer(FailingPrivateKeyProvider(), FixedClock())
 
     with pytest.raises(DependencyUnavailable, match="Chave criptografica indisponivel\\."):
-        issuer.issue(CLIENTE_ID)
+        issuer.issue(str(CLIENTE_ID))
 
 
 def test_invalid_private_key_fails_safely() -> None:
     issuer = Rs256TokenIssuer(StaticPrivateKeyProvider("invalid-private-key"), FixedClock())
 
     with pytest.raises(DependencyUnavailable, match="Chave privada de assinatura indisponivel\\."):
-        issuer.issue(CLIENTE_ID)
+        issuer.issue(str(CLIENTE_ID))
 
 
 def test_invalid_public_key_fails_safely(key_pair: KeyPair) -> None:
@@ -311,7 +323,7 @@ def test_token_and_key_are_not_logged_or_exposed_in_error(
 ) -> None:
     caplog.set_level(logging.INFO)
     issuer = Rs256TokenIssuer(StaticPrivateKeyProvider(key_pair.private_pem), FixedClock())
-    token = issuer.issue(CLIENTE_ID)
+    token = issuer.issue(str(CLIENTE_ID))
     verifier = TokenVerifier(StaticPublicKeyProvider("invalid-public-key"), FixedClock())
 
     with pytest.raises(DependencyUnavailable) as exc_info:

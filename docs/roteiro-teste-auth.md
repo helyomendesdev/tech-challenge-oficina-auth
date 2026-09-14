@@ -40,7 +40,7 @@ Evidências esperadas:
 - Inspeção com `zip_inspection=ok`.
 - `pg8000` é empacotado como wheel `py3-none-any` por ser puro Python; dependências com binários, como `cryptography`, são resolvidas para `manylinux2014_x86_64` e Python 3.11.
 - Dois builds consecutivos devem produzir o mesmo SHA-256.
-- ZIP sem `tests/`, `.git/`, `.env`, caches, `.venv`, `dist/`, `build/`, arquivos `.pem`, `.key`, `.pyc` ou `.pyo`.
+- ZIP sem `tests/`, `.git/`, `.env`, caches, `.venv`, `dist/`, `build/`, arquivos `.pem`, `.key`, `.pyc` ou `.pyo`; os diretórios `.dist-info` permanecem, porque `scramp` lê os próprios metadados no import.
 
 O arquivo declarativo é `pyproject.toml`; `requirements.lock` é o lock versionado de runtime, com versões transitivas e hashes das wheels Linux escolhidas. O build consome somente o lock e falha se as dependências diretas declaradas mudarem sem atualização dos marcadores `# direct`. Não edite o lock manualmente. Para atualizar, faça uma nova resolução com `pip download` usando `--only-binary=:all:`, `--platform manylinux2014_x86_64`, `--implementation cp`, `--python-version 3.11` e `--abi cp311`, registre os hashes com `python -m pip hash`, e repita todos os checks. O ZIP não recebe dependências de desenvolvimento nem depende implicitamente da `.venv`.
 

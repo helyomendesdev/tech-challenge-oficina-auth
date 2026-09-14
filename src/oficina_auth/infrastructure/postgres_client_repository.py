@@ -13,11 +13,12 @@ from oficina_auth.infrastructure.secrets_manager import (
 
 AUTH_DATABASE = "oficina"
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 3.0
+# `documento` (varchar 14, unique) stores the CPF with or without punctuation.
 LOOKUP_SQL = """
 SELECT id, ativo
 FROM atendimento_cliente
-WHERE cpf = %s OR cpf = %s
-ORDER BY CASE WHEN cpf = %s THEN 0 ELSE 1 END
+WHERE documento = %s OR documento = %s
+ORDER BY CASE WHEN documento = %s THEN 0 ELSE 1 END
 LIMIT 1
 """.strip()
 
@@ -104,7 +105,8 @@ class PostgresClientRepository:
 def _connect_with_pg8000(**kwargs: Any) -> Any:
     from pg8000 import dbapi
 
-    return dbapi.connect(**kwargs)
+    # RDS enforces rds.force_ssl=1; ssl_context=True enables TLS with default verification.
+    return dbapi.connect(ssl_context=True, **kwargs)
 
 
 def _required(environment: Mapping[str, str], name: str) -> str:
