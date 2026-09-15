@@ -20,6 +20,66 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Decide se os jobs que falam com a AWS podem rodar. Esta checagem vivia dentro
+  # do Terraform Plan e fazia `exit 1`, o que deixava o CD vermelho em todo push
+  # quando faltava credencial -- apesar da propria mensagem dizer que o workflow
+  # continuaria so com a validacao. Como `secrets` e `vars` nao valem no `if` de
+  # job, ela virou este job, que exporta has_aws; os jobs de AWS passam a ser
+  # pulados, e o run fica verde.
+  preflight:
+    name: Preflight (credenciais AWS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_aws: ${{ steps.check.outputs.has_aws }}
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+      VPC_ID: ${{ vars.VPC_ID }}
+      PRIVATE_SUBNET_IDS: ${{ vars.PRIVATE_SUBNET_IDS_JSON }}
+      LAMBDA_EXECUTION_ROLE_ARN: ${{ vars.LAMBDA_EXECUTION_ROLE_ARN }}
+      RDS_ENDPOINT: ${{ vars.RDS_ENDPOINT }}
+      RDS_PORT: ${{ vars.RDS_PORT }}
+      RDS_SECURITY_GROUP_ID: ${{ vars.RDS_SECURITY_GROUP_ID }}
+      ALB_ARN: ${{ vars.ALB_ARN }}
+      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+      ALB_SECURITY_GROUP_ID: ${{ vars.ALB_SECURITY_GROUP_ID }}
+      ALB_PORT: ${{ vars.ALB_PORT }}
+      ALB_PROTOCOL: ${{ vars.ALB_PROTOCOL }}
+      DB_SECRET_ID: ${{ vars.DB_SECRET_ID }}
+      JWT_PRIVATE_KEY_SECRET_ID: ${{ vars.JWT_PRIVATE_KEY_SECRET_ID }}
+      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+      STAGE_NAME: ${{ vars.STAGE_NAME }}
+    steps:
+      - name: Verifica credenciais AWS e GitHub Variables
+        id: check
+        run: |
+          missing=()
+          for name in AWS_REGION TF_STATE_BUCKET TF_LOCK_TABLE VPC_ID PRIVATE_SUBNET_IDS LAMBDA_EXECUTION_ROLE_ARN RDS_ENDPOINT RDS_PORT RDS_SECURITY_GROUP_ID ALB_ARN ALB_DNS_NAME ALB_SECURITY_GROUP_ID ALB_PORT ALB_PROTOCOL DB_SECRET_ID JWT_PRIVATE_KEY_SECRET_ID POSTGRES_DB STAGE_NAME; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ -z "${AWS_ROLE_ARN:-}" ] && { [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ] || [ -z "${AWS_SESSION_TOKEN:-}" ]; }; then
+            missing+=("AWS_ROLE_ARN ou AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN")
+          fi
+
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "has_aws=true" >> "$GITHUB_OUTPUT"
+            echo "Credenciais e variaveis presentes."
+          else
+            echo "has_aws=false" >> "$GITHUB_OUTPUT"
+            printf 'Faltando no environment %s:\n' "${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}"
+            printf ' - %s\n' "${missing[@]}"
+            echo "::notice title=Sem credenciais AWS::Terraform plan/apply serao pulados; o build do ZIP e a validacao Terraform continuam rodando. As credenciais do AWS Academy Learner Lab expiram a cada sessao: recadastre os secrets e rode o CD por workflow_dispatch."
+          fi
+
   build-zip:
     name: Build Lambda ZIP
     runs-on: ubuntu-latest
@@ -83,7 +143,8 @@ jobs:
 
   terraform-plan:
     name: Terraform Plan
-    needs: [build-zip, terraform-validate]
+    needs: [build-zip, terraform-validate, preflight]
+    if: needs.preflight.outputs.has_aws == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -133,26 +194,6 @@ jobs:
         working-directory: terraform
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check AWS credentials and Terraform inputs
-        run: |
-          missing=()
-          for name in AWS_REGION TF_STATE_BUCKET TF_LOCK_TABLE VPC_ID PRIVATE_SUBNET_IDS LAMBDA_EXECUTION_ROLE_ARN RDS_ENDPOINT RDS_PORT RDS_SECURITY_GROUP_ID ALB_ARN ALB_DNS_NAME ALB_SECURITY_GROUP_ID ALB_PORT ALB_PROTOCOL DB_SECRET_ID JWT_PRIVATE_KEY_SECRET_ID POSTGRES_DB STAGE_NAME; do
-            if [ -z "${!name:-}" ]; then
-              missing+=("$name")
-            fi
-          done
-
-          if [ -z "${AWS_ROLE_ARN:-}" ] && { [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ] || [ -z "${AWS_SESSION_TOKEN:-}" ]; }; then
-            missing+=("AWS_ROLE_ARN or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN")
-          fi
-
-          if [ "${#missing[@]}" -gt 0 ]; then
-            printf 'Terraform plan/apply bloqueado: faltam credenciais ou GitHub Variables no environment %s:\n' "${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}"
-            printf ' - %s\n' "${missing[@]}"
-            echo 'O workflow continua somente com validação Terraform sem acesso à AWS.'
-            exit 1
-          fi
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -208,8 +249,12 @@ jobs:
 
   terraform-apply:
     name: Terraform Apply
-    needs: [terraform-plan]
-    if: github.event_name == 'workflow_dispatch' && inputs.authorize_apply == true && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    needs: [terraform-plan, preflight]
+    if: >-
+      needs.preflight.outputs.has_aws == 'true' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.authorize_apply == true &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
