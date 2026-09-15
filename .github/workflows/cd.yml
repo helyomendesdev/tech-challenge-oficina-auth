@@ -113,7 +113,7 @@ jobs:
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lambda-zip-${{ github.ref_name }}
+          name: lambda-zip-${{ github.run_id }}
           path: build/lambda/oficina_auth_lambda.zip
           retention-days: 7
 
@@ -219,7 +219,7 @@ jobs:
       - name: Download ZIP artifact
         uses: actions/download-artifact@v4
         with:
-          name: lambda-zip-${{ github.ref_name }}
+          name: lambda-zip-${{ github.run_id }}
           path: ${{ github.workspace }}/build/lambda/
 
       - name: Terraform Init
@@ -243,7 +243,7 @@ jobs:
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ github.ref_name }}
+          name: tfplan-${{ github.run_id }}
           path: terraform/tfplan
           retention-days: 1
 
@@ -297,13 +297,13 @@ jobs:
       - name: Download ZIP artifact
         uses: actions/download-artifact@v4
         with:
-          name: lambda-zip-${{ github.ref_name }}
+          name: lambda-zip-${{ github.run_id }}
           path: ${{ github.workspace }}/build/lambda/
 
       - name: Download plan artifact
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ github.ref_name }}
+          name: tfplan-${{ github.run_id }}
           path: terraform/
 
       - name: Terraform Init
