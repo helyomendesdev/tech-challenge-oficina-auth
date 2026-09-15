@@ -135,7 +135,7 @@ resource "aws_api_gateway_deployment" "auth" {
 # padrao. var.api_gateway_access_log_group_arn continua existindo para apontar um
 # Log Group externo quando houver um.
 resource "aws_cloudwatch_log_group" "api_access" {
-  count = var.enable_api_gateway_access_log && var.api_gateway_access_log_group_arn == null ? 1 : 0
+  count = var.enable_api_gateway_access_log && local.access_log_arn_input == null ? 1 : 0
 
   name              = "/aws/apigateway/${local.name_prefix}-api/${var.stage_name}"
   retention_in_days = var.api_gateway_access_log_retention_days
@@ -148,9 +148,9 @@ resource "aws_cloudwatch_log_group" "api_access" {
 # Lab, a LabRole) para que o Terraform cuide desse ajuste; deixe null se a conta
 # ja estiver configurada por fora.
 resource "aws_api_gateway_account" "this" {
-  count = var.api_gateway_cloudwatch_role_arn == null ? 0 : 1
+  count = local.apigw_cw_role_arn == null ? 0 : 1
 
-  cloudwatch_role_arn = var.api_gateway_cloudwatch_role_arn
+  cloudwatch_role_arn = local.apigw_cw_role_arn
 }
 
 resource "aws_api_gateway_stage" "auth" {

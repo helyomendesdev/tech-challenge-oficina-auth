@@ -240,7 +240,7 @@ variable "api_gateway_access_log_group_arn" {
   default     = null
 
   validation {
-    condition     = var.api_gateway_access_log_group_arn == null || can(regex("^arn:[^:]+:logs:[^:]+:[0-9]{12}:log-group:.+$", var.api_gateway_access_log_group_arn))
+    condition     = trimspace(coalesce(var.api_gateway_access_log_group_arn, "")) == "" || can(regex("^arn:[^:]+:logs:[^:]+:[0-9]{12}:log-group:.+$", var.api_gateway_access_log_group_arn))
     error_message = "api_gateway_access_log_group_arn must be an existing CloudWatch Log Group ARN when provided."
   }
 }
@@ -268,7 +268,7 @@ variable "api_gateway_cloudwatch_role_arn" {
   default     = null
 
   validation {
-    condition     = var.api_gateway_cloudwatch_role_arn == null || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.api_gateway_cloudwatch_role_arn))
+    condition     = trimspace(coalesce(var.api_gateway_cloudwatch_role_arn, "")) == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.api_gateway_cloudwatch_role_arn))
     error_message = "api_gateway_cloudwatch_role_arn must be an IAM role ARN when provided."
   }
 }
@@ -279,7 +279,7 @@ variable "new_relic_layer_arn" {
   default     = null
 
   validation {
-    condition     = var.new_relic_layer_arn == null || can(regex("^arn:[^:]+:lambda:[^:]+:[0-9]{12}:layer:.+$", var.new_relic_layer_arn))
+    condition     = trimspace(coalesce(var.new_relic_layer_arn, "")) == "" || can(regex("^arn:[^:]+:lambda:[^:]+:[0-9]{12}:layer:.+$", var.new_relic_layer_arn))
     error_message = "new_relic_layer_arn must be a Lambda layer ARN when provided."
   }
 }

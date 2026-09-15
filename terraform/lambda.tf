@@ -9,7 +9,7 @@ resource "aws_lambda_function" "auth" {
   # Com a New Relic Lambda Layer o entrypoint passa a ser o wrapper, e o handler
   # real vai em NEW_RELIC_LAMBDA_HANDLER (ver locals.tf). Requisito L1.
   handler = local.new_relic_enabled ? "newrelic_lambda_wrapper.handler" : local.lambda_handler_original
-  layers  = local.new_relic_enabled ? [var.new_relic_layer_arn] : null
+  layers  = local.new_relic_enabled ? [local.nr_layer_arn] : null
 
   architectures = [var.lambda_architecture]
   memory_size   = var.lambda_memory_size

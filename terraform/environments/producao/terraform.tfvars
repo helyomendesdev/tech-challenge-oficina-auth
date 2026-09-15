@@ -34,12 +34,14 @@ api_gateway_access_log_group_arn      = null
 api_gateway_access_log_retention_days = 14
 
 # ARN da role de CloudWatch no nivel da conta (LabRole no AWS Academy).
-api_gateway_cloudwatch_role_arn = null
+api_gateway_cloudwatch_role_arn = "arn:aws:iam::166199193623:role/LabRole"
 
 # New Relic (L1): informe os tres para ligar a layer e o wrapper.
-new_relic_layer_arn             = null
+new_relic_layer_arn = "arn:aws:lambda:us-east-1:451483290750:layer:NewRelicPython311:90"
+# FALTA: New Relic -> Administration -> Access management (ou o numero na URL).
+# Sem ele a layer nao e aplicada: locals.new_relic_enabled exige layer E account.
 new_relic_account_id            = null
-new_relic_license_key_secret_id = null
+new_relic_license_key_secret_id = "oficina/newrelic-license"
 
 tags = {
   Owner      = "Lucas"
