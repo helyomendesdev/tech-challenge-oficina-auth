@@ -29,9 +29,20 @@ lambda_log_retention_days = 14
 lambda_architecture       = "x86_64"
 stage_name                = "dev"
 
-# Access logging requires an existing Log Group and an API Gateway account role
-# configured outside this repository. Leave null until that contract exists.
-api_gateway_access_log_group_arn = null
+# Access logging (L4) is on by default and the Log Group is created by this module.
+# Point api_gateway_access_log_group_arn at an existing group only to reuse one.
+enable_api_gateway_access_log         = true
+api_gateway_access_log_group_arn      = null
+api_gateway_access_log_retention_days = 14
+
+# REST API access logging needs an account-level CloudWatch role. On AWS Academy
+# use the LabRole ARN; leave null if the account is already configured.
+api_gateway_cloudwatch_role_arn = null
+
+# New Relic (L1). Informe os tres para ligar a layer e o wrapper na function.
+new_relic_layer_arn             = null
+new_relic_account_id            = null
+new_relic_license_key_secret_id = null
 
 tags = {
   Owner      = "Lucas"

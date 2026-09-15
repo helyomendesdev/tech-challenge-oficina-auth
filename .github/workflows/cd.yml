@@ -189,6 +189,12 @@ jobs:
       TF_VAR_jwt_private_key_secret_id: ${{ vars.JWT_PRIVATE_KEY_SECRET_ID }}
       TF_VAR_postgres_db: ${{ vars.POSTGRES_DB }}
       TF_VAR_stage_name: ${{ vars.STAGE_NAME }}
+      # Observabilidade L1 e L4. Opcionais: variavel nao cadastrada chega como
+      # string vazia, e locals.tf trata "" como ausente.
+      TF_VAR_new_relic_layer_arn: ${{ vars.NEW_RELIC_LAYER_ARN }}
+      TF_VAR_new_relic_account_id: ${{ vars.NEW_RELIC_ACCOUNT_ID }}
+      TF_VAR_new_relic_license_key_secret_id: ${{ vars.NEW_RELIC_LICENSE_KEY_SECRET_ID }}
+      TF_VAR_api_gateway_cloudwatch_role_arn: ${{ vars.API_GATEWAY_CLOUDWATCH_ROLE_ARN }}
     defaults:
       run:
         working-directory: terraform
