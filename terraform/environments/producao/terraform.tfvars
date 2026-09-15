@@ -29,7 +29,17 @@ lambda_log_retention_days = 14
 lambda_architecture       = "x86_64"
 stage_name                = "producao"
 
-api_gateway_access_log_group_arn = null
+enable_api_gateway_access_log         = true
+api_gateway_access_log_group_arn      = null
+api_gateway_access_log_retention_days = 14
+
+# ARN da role de CloudWatch no nivel da conta (LabRole no AWS Academy).
+api_gateway_cloudwatch_role_arn = null
+
+# New Relic (L1): informe os tres para ligar a layer e o wrapper.
+new_relic_layer_arn             = null
+new_relic_account_id            = null
+new_relic_license_key_secret_id = null
 
 tags = {
   Owner      = "Lucas"

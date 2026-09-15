@@ -130,24 +130,54 @@ resource "aws_api_gateway_deployment" "auth" {
   }
 }
 
+# Requisito L4: o access log deixa de depender de um Log Group criado fora deste
+# repositorio -- ele nasce aqui, com retencao, e o access logging fica ligado por
+# padrao. var.api_gateway_access_log_group_arn continua existindo para apontar um
+# Log Group externo quando houver um.
+resource "aws_cloudwatch_log_group" "api_access" {
+  count = var.enable_api_gateway_access_log && var.api_gateway_access_log_group_arn == null ? 1 : 0
+
+  name              = "/aws/apigateway/${local.name_prefix}-api/${var.stage_name}"
+  retention_in_days = var.api_gateway_access_log_retention_days
+  tags              = local.tags
+}
+
+# O access logging de REST API depende de uma role de CloudWatch configurada no
+# nivel da CONTA, nao da API. Sem ela o apply falha com "CloudWatch Logs role ARN
+# must be set in account settings to enable logging". Informe o ARN (no Learner
+# Lab, a LabRole) para que o Terraform cuide desse ajuste; deixe null se a conta
+# ja estiver configurada por fora.
+resource "aws_api_gateway_account" "this" {
+  count = var.api_gateway_cloudwatch_role_arn == null ? 0 : 1
+
+  cloudwatch_role_arn = var.api_gateway_cloudwatch_role_arn
+}
+
 resource "aws_api_gateway_stage" "auth" {
   rest_api_id   = aws_api_gateway_rest_api.auth.id
   deployment_id = aws_api_gateway_deployment.auth.id
   stage_name    = var.stage_name
   tags          = local.tags
 
+  depends_on = [aws_api_gateway_account.this]
+
   dynamic "access_log_settings" {
-    for_each = var.api_gateway_access_log_group_arn == null ? [] : [var.api_gateway_access_log_group_arn]
+    for_each = var.enable_api_gateway_access_log ? [local.api_access_log_group_arn] : []
 
     content {
       destination_arn = access_log_settings.value
       format = jsonencode({
-        requestId         = "$context.requestId"
-        extendedRequestId = "$context.extendedRequestId"
-        httpMethod        = "$context.httpMethod"
-        path              = "$context.path"
-        status            = "$context.status"
-        responseLatency   = "$context.responseLatency"
+        requestId          = "$context.requestId"
+        extendedRequestId  = "$context.extendedRequestId"
+        httpMethod         = "$context.httpMethod"
+        path               = "$context.path"
+        status             = "$context.status"
+        responseLatency    = "$context.responseLatency"
+        integrationLatency = "$context.integrationLatency"
+        "error.message"    = "$context.error.message"
+        # Estatico, nao vem do $context: sem ele o filtro de Log da secao 4 do
+        # README de observabilidade nao separa homologacao de producao.
+        "service.environment" = var.environment
       })
     }
   }

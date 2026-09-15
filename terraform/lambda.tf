@@ -1,15 +1,20 @@
 resource "aws_lambda_function" "auth" {
-  function_name    = "${local.name_prefix}-lambda"
+  function_name    = local.function_name
   description      = "CPF authentication Lambda for Oficina."
   filename         = var.lambda_zip_path
   source_code_hash = filebase64sha256(var.lambda_zip_path)
   role             = var.lambda_execution_role_arn
   runtime          = "python3.11"
-  handler          = "oficina_auth.handlers.auth.lambda_handler"
-  architectures    = [var.lambda_architecture]
-  memory_size      = var.lambda_memory_size
-  timeout          = var.lambda_timeout_seconds
-  publish          = true
+
+  # Com a New Relic Lambda Layer o entrypoint passa a ser o wrapper, e o handler
+  # real vai em NEW_RELIC_LAMBDA_HANDLER (ver locals.tf). Requisito L1.
+  handler = local.new_relic_enabled ? "newrelic_lambda_wrapper.handler" : local.lambda_handler_original
+  layers  = local.new_relic_enabled ? [var.new_relic_layer_arn] : null
+
+  architectures = [var.lambda_architecture]
+  memory_size   = var.lambda_memory_size
+  timeout       = var.lambda_timeout_seconds
+  publish       = true
 
   environment {
     variables = local.lambda_environment
