@@ -235,14 +235,65 @@ variable "stage_name" {
 }
 
 variable "api_gateway_access_log_group_arn" {
-  description = "Optional existing CloudWatch Log Group ARN; account-level API Gateway logging role is external."
+  description = "Optional existing CloudWatch Log Group ARN. When null and access logging is enabled, this module creates its own Log Group."
   type        = string
   default     = null
 
   validation {
-    condition     = var.api_gateway_access_log_group_arn == null || can(regex("^arn:[^:]+:logs:[^:]+:[0-9]{12}:log-group:.+$", var.api_gateway_access_log_group_arn))
+    condition     = trimspace(coalesce(var.api_gateway_access_log_group_arn, "")) == "" || can(regex("^arn:[^:]+:logs:[^:]+:[0-9]{12}:log-group:.+$", var.api_gateway_access_log_group_arn))
     error_message = "api_gateway_access_log_group_arn must be an existing CloudWatch Log Group ARN when provided."
   }
+}
+
+variable "enable_api_gateway_access_log" {
+  description = "Enable API Gateway access logging in JSON (observability requirement L4). On by default."
+  type        = bool
+  default     = true
+}
+
+variable "api_gateway_access_log_retention_days" {
+  description = "Retention for the access log group created by this module."
+  type        = number
+  default     = 14
+
+  validation {
+    condition     = var.api_gateway_access_log_retention_days > 0
+    error_message = "api_gateway_access_log_retention_days must be greater than zero."
+  }
+}
+
+variable "api_gateway_cloudwatch_role_arn" {
+  description = "Account-level IAM role ARN API Gateway uses to write CloudWatch logs (LabRole on AWS Academy). Leave null if the account is already configured."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = trimspace(coalesce(var.api_gateway_cloudwatch_role_arn, "")) == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.api_gateway_cloudwatch_role_arn))
+    error_message = "api_gateway_cloudwatch_role_arn must be an IAM role ARN when provided."
+  }
+}
+
+variable "new_relic_layer_arn" {
+  description = "New Relic Lambda Layer ARN for python3.11 on the chosen architecture (observability requirement L1). Null disables the wrapper."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = trimspace(coalesce(var.new_relic_layer_arn, "")) == "" || can(regex("^arn:[^:]+:lambda:[^:]+:[0-9]{12}:layer:.+$", var.new_relic_layer_arn))
+    error_message = "new_relic_layer_arn must be a Lambda layer ARN when provided."
+  }
+}
+
+variable "new_relic_account_id" {
+  description = "New Relic account id. Required together with new_relic_layer_arn to enable the wrapper."
+  type        = string
+  default     = null
+}
+
+variable "new_relic_license_key_secret_id" {
+  description = "Secrets Manager secret id holding the New Relic license key. The extension reads it from there, so the key never appears in plaintext."
+  type        = string
+  default     = null
 }
 
 variable "tags" {
